@@ -148,6 +148,13 @@ fun AlbumListScreen(
                         retryLabel = "Retry",
                         modifier = Modifier.widthIn(max = 760.dp),
                     )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Using ${config.normalizedBaseUrl()}",
+                        color = Palette.MutedDim,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                    )
                     Spacer(Modifier.height(18.dp))
                     TvButton(label = "Edit connection", onClick = onOpenSettings)
                 }

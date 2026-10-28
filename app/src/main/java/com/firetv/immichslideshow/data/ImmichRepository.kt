@@ -9,7 +9,16 @@ import retrofit2.HttpException
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.Retrofit
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import java.security.cert.CertPathValidatorException
+import java.security.cert.CertificateException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 
 /**
  * Thin, blocking-free facade over Immich. Every call returns [Result] so the
@@ -35,9 +44,15 @@ class ImmichRepository(
         .build()
         .create(ImmichApi::class.java)
 
+    /**
+     * `/api/server/ping` needs no credentials, so the ping alone only proves the
+     * address. One album call proves the API key as well before we save it.
+     */
     suspend fun checkConnection(): Result<String> = call {
         val ping = api.ping()
-        if (ping.res.equals("pong", ignoreCase = true)) "Connected" else ping.res
+        if (!ping.res.equals("pong", ignoreCase = true)) return@call ping.res
+        api.getAlbums()
+        "Connected"
     }
 
     suspend fun albums(): Result<List<Album>> = call {
@@ -76,8 +91,8 @@ class ImmichRepository(
             else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(7, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 chain.proceed(
                     chain.request().newBuilder()
@@ -90,19 +105,83 @@ class ImmichRepository(
             .build()
     }
 
-    private suspend fun <T> call(block: suspend () -> T): Result<T> = try {
-        Result.success(block())
-    } catch (e: HttpException) {
-        Result.failure(ImmichException(mapHttpError(e), e))
-    } catch (e: IOException) {
-        Result.failure(
-            ImmichException(
-                "Can't reach ${config.displayHost()}. Check the URL and that the TV is on the same network.",
-                e,
-            ),
-        )
-    } catch (e: Exception) {
-        Result.failure(ImmichException(e.message ?: "Unexpected error talking to Immich.", e))
+    /**
+     * Every endpoint here is a GET, so a single quiet retry is safe. Fire OS
+     * drops the first connection after the TV has been idle, and one retry turns
+     * that into a pause instead of an error card.
+     */
+    private suspend fun <T> call(block: suspend () -> T): Result<T> {
+        var attempt = 0
+        while (true) {
+            try {
+                return Result.success(block())
+            } catch (e: HttpException) {
+                return Result.failure(ImmichException(mapHttpError(e), e))
+            } catch (e: IOException) {
+                if (BuildConfig.DEBUG) {
+                    android.util.Log.w("ImmichRepo", "request failed (attempt ${attempt + 1}): ${config.normalizedBaseUrl()}", e)
+                }
+                if (attempt == 0) {
+                    attempt++
+                    delay(500)
+                    continue
+                }
+                return Result.failure(ImmichException(networkMessage(e), e, networkFailure = true))
+            } catch (e: Exception) {
+                return Result.failure(ImmichException(e.message ?: "Unexpected error talking to Immich.", e))
+            }
+        }
+    }
+
+    /**
+     * TLS trust problems, DNS failures and closed ports all surface as
+     * IOException, but they need different fixes, so name the one we hit.
+     */
+    private fun networkMessage(e: IOException): String {
+        val host = config.displayHost()
+        return when {
+            e.isTlsTrustFailure() ->
+                "The TV doesn't trust the HTTPS certificate for $host. " +
+                    "Use a certificate the TV knows, or the plain http:// address of the server."
+            e.hasCause<SSLException>() ->
+                "$host didn't answer a secure connection. Try the plain http:// address instead."
+            e.hasCause<UnknownHostException>() ->
+                "Can't reach $host. The TV couldn't look up that name — check the spelling, or enter the server's IP address."
+            e.hasCause<SocketTimeoutException>() ->
+                "Can't reach $host. The server didn't answer in time — is Immich running on that address?"
+            e.hasCause<ConnectException>() ->
+                "Can't reach $host. The connection was refused — is Immich listening on that port?"
+            else ->
+                "Can't reach $host. Check the URL and that the TV is on the same network."
+        }
+    }
+
+    private inline fun <reified T : Throwable> IOException.hasCause(): Boolean {
+        var cause: Throwable? = this
+        var depth = 0
+        while (cause != null && depth < 8) {
+            if (cause is T) return true
+            cause = cause.cause
+            depth++
+        }
+        return false
+    }
+
+    private fun IOException.isTlsTrustFailure(): Boolean {
+        var cause: Throwable? = this
+        var depth = 0
+        while (cause != null && depth < 8) {
+            if (cause is CertPathValidatorException ||
+                cause is CertificateException ||
+                cause is SSLPeerUnverifiedException ||
+                (cause is SSLHandshakeException && hasCause<CertificateException>())
+            ) {
+                return true
+            }
+            cause = cause.cause
+            depth++
+        }
+        return false
     }
 
     private fun mapHttpError(e: HttpException): String = when (e.code()) {
@@ -114,4 +193,9 @@ class ImmichRepository(
     }
 }
 
-class ImmichException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class ImmichException(
+    message: String,
+    cause: Throwable? = null,
+    /** True when nothing answered — worth retrying against another address. */
+    val networkFailure: Boolean = false,
+) : Exception(message, cause)

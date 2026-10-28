@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.firetv.immichslideshow.AppContainer
 import com.firetv.immichslideshow.data.ImmichConfig
+import com.firetv.immichslideshow.data.ImmichException
 import com.firetv.immichslideshow.ui.components.AppBackground
 import com.firetv.immichslideshow.ui.components.ErrorNotice
 import com.firetv.immichslideshow.ui.components.KeyHint
@@ -85,6 +86,8 @@ fun SetupScreen(
     var success by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val urlFocus = remember { FocusRequester() }
+    val keyFocus = remember { FocusRequester() }
+    val connectFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         if (initial == null) runCatching { urlFocus.requestFocus() }
@@ -101,18 +104,25 @@ fun SetupScreen(
         error = null
         success = null
         scope.launch {
-            val config = ImmichConfig(baseUrl = candidateUrl, apiKey = candidateKey).sanitized()
-            container.repository(config).checkConnection()
-                .onSuccess {
+            var failure: Throwable? = null
+            for (candidate in ImmichConfig.addressCandidates(candidateUrl)) {
+                val config = ImmichConfig(baseUrl = candidate, apiKey = candidateKey).sanitized()
+                val result = container.repository(config).checkConnection()
+                result.onSuccess {
                     container.settings.saveConfig(config)
                     busy = false
                     success = "Connected to ${config.displayHost()}"
                     onConnected()
+                    return@launch
                 }
-                .onFailure {
-                    busy = false
-                    error = it.message ?: "Could not reach Immich."
-                }
+                val error = result.exceptionOrNull()
+                failure = error
+                // Nothing answered, so the scheme may be wrong — try the other
+                // one. A rejected key or a 404 means the address itself is fine.
+                if ((error as? ImmichException)?.networkFailure != true) break
+            }
+            busy = false
+            error = failure?.message ?: "Could not reach Immich."
         }
     }
 
@@ -199,6 +209,7 @@ fun SetupScreen(
                         placeholder = "http://192.168.1.20:2283",
                         keyboardType = KeyboardType.Uri,
                         focusRequester = urlFocus,
+                        onDone = { scope.launch { runCatching { keyFocus.requestFocus() } } },
                     )
                     Spacer(Modifier.height(14.dp))
                     TvTextField(
@@ -208,6 +219,8 @@ fun SetupScreen(
                         placeholder = "Paste an Immich API key",
                         keyboardType = KeyboardType.Password,
                         visualTransformation = PasswordVisualTransformation(),
+                        focusRequester = keyFocus,
+                        onDone = { scope.launch { runCatching { connectFocus.requestFocus() } } },
                     )
 
                     Spacer(Modifier.height(18.dp))
@@ -218,33 +231,34 @@ fun SetupScreen(
                         TvButton(
                             label = if (busy) "Connecting…" else "Connect",
                             onClick = ::connect,
+                            modifier = Modifier.focusRequester(connectFocus),
                             accent = true,
                             enabled = !busy,
                         )
                         TvButton(label = "Try demo mode", onClick = ::startDemo, enabled = !busy)
-                        if (busy) {
-                            Spacer(Modifier.width(6.dp))
-                            Spinner(size = 26.dp)
-                        }
                     }
 
                     if (error != null) {
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(14.dp))
                         ErrorNotice(message = error.orEmpty())
                     }
                     if (success != null) {
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(14.dp))
                         Text(text = success.orEmpty(), color = Palette.Ok, fontSize = 16.sp)
                     }
 
-                    Spacer(Modifier.height(18.dp))
-                    Text(
-                        text = "Immich → Account Settings → API Keys → New API Key. " +
-                            "Use the address the TV can reach, not localhost.",
-                        color = Palette.MutedDim,
-                        fontSize = 12.5.sp,
-                        lineHeight = 18.sp,
-                    )
+                    // The onboarding hint is only worth its height while the form
+                    // is still empty; once there is a message the card needs the room.
+                    if (error == null && success == null) {
+                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            text = "Immich → Account Settings → API Keys → New API Key. " +
+                                "Use the address the TV can reach, not localhost.",
+                            color = Palette.MutedDim,
+                            fontSize = 12.5.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
                 }
 
                 if (canGoBack) {
@@ -267,6 +281,7 @@ private fun TvTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     focusRequester: FocusRequester? = null,
+    onDone: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -350,7 +365,9 @@ private fun TvTextField(
                     onDone = {
                         editing = false
                         keyboard?.hide()
-                        focusManager.moveFocus(FocusDirection.Down)
+                        // Hand focus to the next control the form owns rather than
+                        // letting geometry pick a neighbour.
+                        if (onDone != null) onDone() else focusManager.moveFocus(FocusDirection.Down)
                     },
                 ),
             )

@@ -39,5 +39,22 @@ data class ImmichConfig(
 
         fun isValid(baseUrl: String, apiKey: String): Boolean =
             baseUrl.trim().isNotEmpty() && apiKey.trim().isNotEmpty()
+
+        /**
+         * Addresses worth trying, most likely first: exactly what was typed, then
+         * the same host with the other scheme. A LAN Immich is usually plain http
+         * on :2283, a public one https on :443, and people rarely type a scheme.
+         */
+        fun addressCandidates(raw: String): List<String> {
+            val trimmed = raw.trim().trimEnd('/')
+            if (trimmed.isEmpty()) return emptyList()
+            return when {
+                trimmed.startsWith("https://") ->
+                    listOf(trimmed, "http://" + trimmed.removePrefix("https://"))
+                trimmed.startsWith("http://") ->
+                    listOf(trimmed, "https://" + trimmed.removePrefix("http://"))
+                else -> listOf("https://$trimmed", "http://$trimmed")
+            }
+        }
     }
 }
