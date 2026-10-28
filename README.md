@@ -132,6 +132,11 @@ heights are nudged so the mosaic meets all four screen edges. `GridPlan` owns th
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
+The Scrapbook desk is a ring of five polaroids: the photo that has just arrived
+lands on the next place, so exactly one card is replaced per step and the other
+four stay put. `ScrapbookDesk` owns that mapping (and wraps into the end of the
+album, so the desk is never half empty at the start of a show).
+
 `GridLayers` turns a page into paint layers so the wall on screen keeps its own
 layout until a tile turns over: a photo on its way out is still drawn in the cell
 the *old* layout gave it, and only the arriving photo takes the new layout's

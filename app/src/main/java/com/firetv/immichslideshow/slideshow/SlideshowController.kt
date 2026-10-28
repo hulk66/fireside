@@ -127,6 +127,11 @@ class SlideshowController(
             request(index, tile = false)
             return
         }
+        if (prefs.effect == SlideshowEffect.SCRAPBOOK) {
+            // The desk shows the last five photos; the older cards are only ever
+            // drawn small, so tiles are enough to keep them all on the table.
+            for (k in 0 until ScrapbookDesk.SLOTS) request(index - k, tile = true)
+        }
         request(index - 1, tile = false)
         request(index, tile = false)
         request(index + 1, tile = false)
