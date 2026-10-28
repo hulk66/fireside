@@ -132,6 +132,12 @@ heights are nudged so the mosaic meets all four screen edges. `GridPlan` owns th
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
+`GridLayers` turns a page into paint layers so the wall on screen keeps its own
+layout until a tile turns over: a photo on its way out is still drawn in the cell
+the *old* layout gave it, and only the arriving photo takes the new layout's
+cell. Otherwise the incoming layout would re-flow photos that have not changed
+yet, and the whole wall would visibly jump before a single photo swapped.
+
 ## Layout notes
 
 A 1080p Fire TV reports roughly **960 × 540 dp** at 320 dpi, so vertical space is

@@ -640,39 +640,47 @@ object SlideshowRenderer {
         }
 
         val gap = 6.dp.toPx()
-        val aspects = page.indices.map { index ->
-            frame.photos.getOrNull(index)?.aspectRatio ?: 1.5f
-        }
-        val rects = JustifiedGrid.layout(aspects, w, h, gap)
-        if (rects.isEmpty()) {
+        val currentCells = justifiedCells(frame, page.indices, w, h, gap)
+        if (currentCells.isEmpty()) {
             drawPlaceholder()
             return
+        }
+        val previousCells = if (page.generation > 0L) {
+            justifiedCells(frame, GridPlan.indicesFor(page.generation - 1, frame.count), w, h, gap)
+        } else {
+            currentCells
         }
 
         // The grid is a mosaic of crops: letterboxing every tile would fill the
         // wall with bars, so it always fills regardless of the fit setting.
-        for (tile in page.tiles) {
-            val cell = rects.getOrNull(tile.slot) ?: continue
-            val rect = Rect(cell.left, cell.top, cell.right, cell.bottom)
-            val clip = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(3.dp.toPx()))) }
-            val from = frame.bitmaps.tile(tile.fromIndex)
-            val to = frame.bitmaps.tile(tile.toIndex)
+        for (draw in GridLayers.plan(page, currentCells, previousCells)) {
+            drawGridTile(frame.bitmaps.tile(draw.index), draw.cell, draw.alpha)
+        }
+    }
 
-            clipPath(clip) {
-                when {
-                    from != null && to != null -> {
-                        if (tile.mix < 1f) {
-                            drawCropped(from, rect, 1f, 0.5f, 0.5f, alpha = 1f - tile.mix, fit = false)
-                        }
-                        if (tile.mix > 0f) {
-                            drawCropped(to, rect, 1f, 0.5f, 0.5f, alpha = tile.mix, fit = false)
-                        }
-                    }
-                    from != null -> drawCropped(from, rect, 1f, 0.5f, 0.5f, fit = false)
-                    to != null -> drawCropped(to, rect, 1f, 0.5f, 0.5f, fit = false)
-                    else -> drawRect(Color(0xFF141821), rect.topLeft, rect.size)
-                }
-            }
+    private fun justifiedCells(
+        frame: SlideshowFrame,
+        indices: List<Int>,
+        width: Float,
+        height: Float,
+        gap: Float,
+    ): List<GridRect> {
+        val aspects = indices.map { index ->
+            frame.photos.getOrNull(index)?.aspectRatio ?: 1.5f
+        }
+        return JustifiedGrid.layout(aspects, width, height, gap)
+    }
+
+    private fun DrawScope.drawGridTile(bitmap: ImageBitmap?, cell: GridRect?, alpha: Float) {
+        if (cell == null || alpha <= 0.001f) return
+        val rect = Rect(cell.left, cell.top, cell.right, cell.bottom)
+        if (bitmap == null) {
+            if (alpha >= 0.999f) drawRect(Color(0xFF141821), rect.topLeft, rect.size)
+            return
+        }
+        val clip = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(3.dp.toPx()))) }
+        clipPath(clip) {
+            drawCropped(bitmap, rect, 1f, 0.5f, 0.5f, alpha = alpha, fit = false)
         }
     }
 
