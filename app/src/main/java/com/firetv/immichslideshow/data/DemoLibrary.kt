@@ -118,7 +118,9 @@ object DemoLibrary {
 
         // Sky
         paint.shader = LinearGradient(0f, 0f, 0f, horizon, p.skyTop, p.skyBottom, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, w, horizon + 1f, paint)
+        // Paint the full height: the water rect only starts a little below the
+        // horizon, and any unpainted strip would show up as bare black canvas.
+        canvas.drawRect(0f, 0f, w, h, paint)
         paint.shader = null
 
         // Stars
@@ -206,7 +208,7 @@ object DemoLibrary {
         }
 
         // Water
-        val waterTop = horizon + h * 0.08f
+        val waterTop = horizon + h * 0.015f
         paint.shader = LinearGradient(
             0f, waterTop, 0f, h,
             intArrayOf(

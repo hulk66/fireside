@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -346,10 +347,14 @@ private fun SlideshowChrome(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .heightIn(min = 132.dp)
                 .background(
-                    Brush.verticalGradient(listOf(Color.Transparent, Color(0xB3000000))),
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, Color(0x8C000000), Color(0xD9000000)),
+                    ),
                 )
                 .padding(horizontal = 52.dp, vertical = 30.dp),
+            verticalArrangement = Arrangement.Bottom,
         ) {
             Row(
                 Modifier.fillMaxWidth(),

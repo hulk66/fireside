@@ -66,10 +66,12 @@ object SlideshowRenderer {
     private fun captionAlpha(frame: SlideshowFrame): Float {
         if (!frame.prefs.showCaption || frame.transition > 0f) return 0f
         val hold = frame.hold
+        // Stay up for most of the hold and clear out just before the cut, so a
+        // caption is not missing for half of every slide.
         return when {
-            hold < 0.05f -> hold / 0.05f
-            hold < 0.42f -> 1f
-            hold < 0.55f -> 1f - (hold - 0.42f) / 0.13f
+            hold < 0.06f -> hold / 0.06f
+            hold < 0.80f -> 1f
+            hold < 0.94f -> 1f - (hold - 0.80f) / 0.14f
             else -> 0f
         }.coerceIn(0f, 1f)
     }
@@ -96,8 +98,8 @@ object SlideshowRenderer {
             letterSpacing = (captionPx * 0.02f).toSp(),
             shadow = Shadow(
                 color = Color.Black.copy(alpha = 0.65f * alpha),
-                offset = Offset(0f, captionPx * 0.07f),
-                blurRadius = captionPx * 0.34f,
+                offset = Offset(0f, captionPx * 0.05f),
+                blurRadius = captionPx * 0.20f,
             ),
         )
         val layout = textMeasurer.measure(text = text, style = style, maxLines = 1)
@@ -370,22 +372,23 @@ object SlideshowRenderer {
         val next = frame.bitmaps.full(frame.nextIndex)
         val p = Easing.easeInOutCubic(frame.transition)
 
+        // Kept clear of the chrome above and the caption band below.
         val box = Rect(
-            w * 0.16f,
-            h * 0.13f + floatY,
-            w * 0.84f,
-            h * 0.66f + floatY,
+            w * 0.22f,
+            h * 0.15f + floatY,
+            w * 0.78f,
+            h * 0.61f + floatY,
         )
 
         // Warm glow behind the photo
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x33FFB27A), Color(0x00000000)),
-                center = Offset(w * 0.5f, h * 0.36f),
+                center = Offset(w * 0.5f, h * 0.38f),
                 radius = max(w, h) * 0.55f,
             ),
             radius = max(w, h) * 0.55f,
-            center = Offset(w * 0.5f, h * 0.36f),
+            center = Offset(w * 0.5f, h * 0.38f),
         )
 
         val curRect = cur?.let { fitRect(it, box) }
@@ -399,12 +402,12 @@ object SlideshowRenderer {
         val anchorRect = curRect ?: nextRect ?: return
         val gap = h * 0.018f
         val reflTop = anchorRect.bottom + gap
-        val reflHeight = anchorRect.height * 0.55f
+        val reflHeight = anchorRect.height * 0.36f
         if (reflTop >= h) return
         val reflRect = Rect(anchorRect.left, reflTop, anchorRect.right, min(h, reflTop + reflHeight))
 
         clipRect(reflRect.left, reflRect.top, reflRect.right, reflRect.bottom) {
-            withTransform({ scale(1f, -0.55f, Offset(anchorRect.center.x, reflTop)) }) {
+            withTransform({ scale(1f, -0.7f, Offset(anchorRect.center.x, reflTop)) }) {
                 if (curRect != null && cur != null) {
                     drawCropped(cur, curRect, 1f, 0.5f, 0.5f, alpha = 0.42f)
                 }
@@ -414,7 +417,11 @@ object SlideshowRenderer {
             }
             drawRect(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color(0xFF06070B).copy(alpha = 0.95f)),
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xFF06070B).copy(alpha = 0.55f),
+                        Color(0xFF06070B).copy(alpha = 0.97f),
+                    ),
                     startY = reflRect.top,
                     endY = reflRect.bottom,
                 ),
@@ -477,13 +484,29 @@ object SlideshowRenderer {
             val seed = photo.id.hashCode().toLong()
             val isCurrent = offset == 0
 
-            val rot = photoRotation(seed, layer, 4.5f) * if (isCurrent) 1f else 1.3f
-            val jitter = photoOffset(seed, layer, 0.045f)
+            val rot = photoRotation(seed, layer, 4.5f) * if (isCurrent) 1f else 1.25f
+            // The front card stays anchored; the older ones peek out by a fixed
+            // amount per layer so the pile reads as a stack, not a row of cards.
+            val jitter = photoOffset(seed, layer, if (isCurrent) 0.014f else 0.006f)
+            val layerDx = when (offset) {
+                -1 -> -0.024f
+                -2 -> 0.026f
+                else -> 0f
+            }
+            val layerDy = when (offset) {
+                -1 -> 0.018f
+                -2 -> 0.032f
+                else -> 0f
+            }
 
-            var scale = if (isCurrent) 1f else 0.9f
-            var alpha = if (isCurrent) 1f else 0.92f
-            var cy = h * (0.5f + jitter.y)
-            val cx = w * (0.5f + jitter.x)
+            var scale = when (offset) {
+                0 -> 1f
+                -1 -> 0.94f
+                else -> 0.89f
+            }
+            var alpha = if (isCurrent) 1f else 0.94f
+            var cy = h * (0.5f + layerDy + jitter.y)
+            val cx = w * (0.5f + layerDx + jitter.x)
 
             if (isCurrent) {
                 cy += (1f - dropEase) * h * 0.55f
@@ -528,6 +551,13 @@ object SlideshowRenderer {
             drawPlaceholder()
         }
         if (cur == null) return
+
+        // At rest the 24 clipped facets would leave hairline seams along every
+        // crease, so paint the untouched frame in one go instead.
+        if (frame.transition <= 0.0001f) {
+            drawCropped(cur, full, 1f, 0.5f, 0.5f)
+            return
+        }
 
         val total = cols * rows * 2
         var facet = 0
