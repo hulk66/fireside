@@ -351,14 +351,9 @@ object SlideshowRenderer {
             }
         }
 
-        // Hairline seams, so the wall of tiles still reads as tiles at rest.
-        val seam = Color.Black.copy(alpha = 0.22f)
-        for (c in 1 until cols) {
-            drawLine(seam, Offset(tileW * c, 0f), Offset(tileW * c, size.height), strokeWidth = 2f)
-        }
-        for (r in 1 until rows) {
-            drawLine(seam, Offset(0f, tileH * r), Offset(size.width, tileH * r), strokeWidth = 2f)
-        }
+        // No seam lines: every tile is cropped from the same full-frame mapping,
+        // so at rest the tiles join into one continuous picture. The splits only
+        // appear while a tile is actually moving.
     }
 
     /** A floating photo with its mirrored echo on dark water. */
