@@ -33,6 +33,7 @@ class SlideshowController(
     private val scope: CoroutineScope,
     private val decodeSize: IntSize = IntSize(1920, 1080),
     private val tileDecodeSize: IntSize = IntSize(640, 360),
+    private val scrapbookTileSize: IntSize = IntSize(480, 480),
 ) {
 
     private val basePhotos: List<Photo> = photos
@@ -130,7 +131,7 @@ class SlideshowController(
         if (prefs.effect == SlideshowEffect.SCRAPBOOK) {
             // The desk shows the last five photos; the older cards are only ever
             // drawn small, so tiles are enough to keep them all on the table.
-            for (k in 0 until ScrapbookDesk.SLOTS) request(index - k, tile = true)
+            for (k in 0 until ScrapbookDesk.CARDS) request(index - k, tile = true)
         }
         request(index - 1, tile = false)
         request(index, tile = false)
@@ -152,7 +153,13 @@ class SlideshowController(
         inFlight.add(key)
 
         val photo = photos[index]
-        val target = if (tile) tileDecodeSize else decodeSize
+        val target = when {
+            !tile -> decodeSize
+            // Scrapbook cards are portrait as often as landscape; a square
+            // decode keeps both orientations sharp without the full-frame cost.
+            prefs.effect == SlideshowEffect.SCRAPBOOK -> scrapbookTileSize
+            else -> tileDecodeSize
+        }
         scope.launch(decoder) {
             val bitmap = runCatching { source.load(photo, target.width, target.height) }.getOrNull()
             withContext(Dispatchers.Main) {

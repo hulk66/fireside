@@ -21,6 +21,9 @@ full-screen show and the animated thumbnails in the theme picker.
   justified edge to edge, and the wall turns over one calm page at a time.
 - **Live theme picker** — every tile is an animated preview rendered by the real
   slideshow renderer, not a static image.
+- **Downsized previews** — photos are fetched from Immich's `preview` rendition
+  (`/api/assets/{id}/thumbnail?size=preview`), never the original, so a show
+  costs a few hundred KB per photo even for 50 MP raws.
 - **Demo mode** — no server needed; 14 procedurally painted landscapes (multiple
   palettes, landform styles and foreground silhouettes) so the app is fully
   usable out of the box.
@@ -132,10 +135,12 @@ heights are nudged so the mosaic meets all four screen edges. `GridPlan` owns th
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
-The Scrapbook desk is a ring of five polaroids: the photo that has just arrived
-lands on the next place, so exactly one card is replaced per step and the other
-four stay put. `ScrapbookDesk` owns that mapping (and wraps into the end of the
-album, so the desk is never half empty at the start of a show).
+The Scrapbook desk is a pile of up to twenty polaroids. Each card keeps the place
+it was given when it arrived — the spot is derived from the photo id, so a card
+never wanders while it is on screen — and the newest card lands on top, partly or
+wholly covering older ones. When the pile is full the oldest card slides off the
+bottom. `ScrapbookDesk` owns the pile: which photos are on the desk, which one
+leaves, and each card's scattered placement.
 
 `GridLayers` turns a page into paint layers so the wall on screen keeps its own
 layout until a tile turns over: a photo on its way out is still drawn in the cell

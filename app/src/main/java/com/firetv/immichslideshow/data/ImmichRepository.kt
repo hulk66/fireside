@@ -70,11 +70,27 @@ class ImmichRepository(
         api.getAlbum(albumId, withoutAssets = false).toDomain()
     }
 
+    /** Photo lists are a few hundred KB each; keep the last few for the session. */
+    private val photoCache = java.util.concurrent.ConcurrentHashMap<String, List<Photo>>()
+
     /**
      * Album photos, oldest first. Immich v2/v3 keeps assets out of the album
-     * payload, so they are paged in from the metadata search instead.
+     * payload, so they are paged in from the metadata search instead — a large
+     * album is a couple of megabyte-sized responses, so the result is memoised
+     * and re-entering an album does not go back to the network.
      */
-    suspend fun photos(albumId: String): Result<List<Photo>> = call {
+    suspend fun photos(albumId: String): Result<List<Photo>> {
+        photoCache[albumId]?.let { return Result.success(it) }
+        return call { fetchPhotos(albumId) }
+            .onSuccess { photos ->
+                photoCache[albumId] = photos
+                if (photoCache.size > PHOTO_CACHE_ALBUMS) {
+                    photoCache.keys.firstOrNull()?.let { photoCache.remove(it) }
+                }
+            }
+    }
+
+    private suspend fun fetchPhotos(albumId: String): List<Photo> {
         val photos = ArrayList<Photo>()
         var page = 1
         while (photos.size < MAX_ALBUM_PHOTOS) {
@@ -91,7 +107,7 @@ class ImmichRepository(
             if (items.size < SEARCH_PAGE) break
             page++
         }
-        photos
+        return photos
     }
 
     fun thumbnailUrl(assetId: String, preview: Boolean = true): String {
@@ -214,6 +230,9 @@ private const val SEARCH_PAGE = 1000
 
 /** Enough for any album a TV slideshow would want to walk through. */
 private const val MAX_ALBUM_PHOTOS = 5_000
+
+/** How many albums' photo lists to keep memoised. */
+private const val PHOTO_CACHE_ALBUMS = 8
 
 class ImmichException(
     message: String,

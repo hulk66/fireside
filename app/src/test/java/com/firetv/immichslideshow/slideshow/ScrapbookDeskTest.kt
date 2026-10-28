@@ -1,57 +1,108 @@
 package com.firetv.immichslideshow.slideshow
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScrapbookDeskTest {
 
+    private val frameAspect = 16f / 9f
+
     @Test
-    fun `the desk fills every slot from the first step`() {
-        val count = 40
-        val shown = (0 until ScrapbookDesk.SLOTS).map { ScrapbookDesk.photoIndex(0, it, count) }
-        assertEquals(ScrapbookDesk.SLOTS, shown.distinct().size)
-        shown.forEach { assertTrue(it in 0 until count) }
+    fun `the desk is full from the very first step`() {
+        // Older places wrap into the end of the album, so the table is never
+        // half empty when a show starts.
+        val shown = ScrapbookDesk.visible(0, 40)
+        assertEquals(20, shown.size)
+        assertEquals(0, shown.first())
+        assertEquals(shown.distinct().size, shown.size)
+        shown.forEach { assertTrue(it in 0 until 40) }
     }
 
     @Test
-    fun `the desk shows the last five photos`() {
-        val count = 40
-        val index = 12
-        val shown = (0 until ScrapbookDesk.SLOTS).map { ScrapbookDesk.photoIndex(index, it, count) }.toSet()
-        assertEquals(setOf(8, 9, 10, 11, 12), shown)
+    fun `the desk fills to twenty cards`() {
+        assertEquals(20, ScrapbookDesk.visible(19, 40).size)
+        assertEquals(20, ScrapbookDesk.visible(39, 40).size)
+        // Newest first, no repeats.
+        val shown = ScrapbookDesk.visible(19, 40)
+        assertEquals(shown.distinct().size, shown.size)
+        assertEquals(19, shown.first())
     }
 
     @Test
-    fun `the current photo sits on the next slot of the ring`() {
-        val count = 40
-        for (index in 0 until 15) {
-            val slot = ScrapbookDesk.newestSlot(index)
-            assertEquals(index, ScrapbookDesk.photoIndex(index, slot, count))
+    fun `a short album shows every photo once`() {
+        val shown = ScrapbookDesk.visible(3, 5)
+        assertEquals(5, shown.size)
+        assertEquals(shown.distinct().size, shown.size)
+        shown.forEach { assertTrue(it in 0 until 5) }
+    }
+
+    @Test
+    fun `one card arrives and one leaves per step`() {
+        val before = ScrapbookDesk.visible(19, 40).toSet()
+        val after = ScrapbookDesk.visible(20, 40).toSet()
+        assertEquals(1, (after - before).size)
+        assertEquals(1, (before - after).size)
+        // The card that leaves is the oldest one that was on the desk.
+        assertEquals(0, ScrapbookDesk.leaving(20, 40))
+        assertEquals(ScrapbookDesk.visible(19, 40).last(), ScrapbookDesk.leaving(20, 40))
+    }
+
+    @Test
+    fun `nothing leaves while the album is smaller than the desk`() {
+        assertNull(ScrapbookDesk.leaving(5, 20))
+        assertNull(ScrapbookDesk.leaving(19, 7))
+        assertNotNull(ScrapbookDesk.leaving(21, 40))
+    }
+
+    @Test
+    fun `placements are stable for a photo`() {
+        val a = ScrapbookDesk.placement("asset-123", 1.5f, frameAspect)
+        val b = ScrapbookDesk.placement("asset-123", 1.5f, frameAspect)
+        assertEquals(a, b)
+    }
+
+    @Test
+    fun `different photos land in different places`() {
+        val places = (0 until 20).map {
+            ScrapbookDesk.placement("asset-$it", 1.5f, frameAspect)
+        }
+        assertTrue("placements are too uniform", places.map { it.cx }.distinct().size > 15)
+        assertTrue(places.map { it.cy }.distinct().size > 15)
+    }
+
+    @Test
+    fun `a card never hangs off the desk`() {
+        val aspects = listOf(0.7f, 1f, 1.5f, 2f)
+        for (i in 0 until 200) {
+            for (aspect in aspects) {
+                val p = ScrapbookDesk.placement("asset-$i", aspect, frameAspect)
+                val cardAspect = 1.034f / aspect + 0.10f
+                val heightFraction = (p.width * frameAspect * cardAspect).coerceAtMost(0.42f)
+                assertTrue("card $i/$aspect pokes out on the left", p.cx - p.width / 2f > 0f)
+                assertTrue("card $i/$aspect pokes out on the right", p.cx + p.width / 2f < 1f)
+                assertTrue("card $i/$aspect pokes out on top", p.cy - heightFraction / 2f > 0f)
+                assertTrue("card $i/$aspect pokes out at the bottom", p.cy + heightFraction / 2f < 1f)
+                assertTrue("rotation is too steep", kotlin.math.abs(p.rotation) <= 9f)
+            }
         }
     }
 
     @Test
-    fun `exactly one slot changes per step`() {
-        val count = 40
-        for (index in 1 until 15) {
-            val before = (0 until ScrapbookDesk.SLOTS).map { ScrapbookDesk.photoIndex(index - 1, it, count) }
-            val after = (0 until ScrapbookDesk.SLOTS).map { ScrapbookDesk.photoIndex(index, it, count) }
-            val changed = before.indices.count { before[it] != after[it] }
-            assertEquals("step $index changed $changed slots", 1, changed)
-            assertEquals(ScrapbookDesk.newestSlot(index), before.indices.first { before[it] != after[it] })
+    fun `a broken aspect still gets a sane placement`() {
+        listOf(0f, -1f, Float.NaN).forEach { aspect ->
+            val p = ScrapbookDesk.placement("asset-x", aspect, frameAspect)
+            assertTrue(p.width.isFinite() && p.width > 0f)
+            assertTrue(p.cx.isFinite() && p.cx > 0f && p.cx < 1f)
+            assertTrue(p.cy.isFinite() && p.cy > 0f && p.cy < 1f)
         }
     }
 
     @Test
-    fun `slots wrap into the end of a short album`() {
-        val shown = (0 until ScrapbookDesk.SLOTS).map { ScrapbookDesk.photoIndex(1, it, 3) }
-        shown.forEach { assertTrue(it in 0..2) }
-        assertEquals(1, shown[1])
-    }
-
-    @Test
-    fun `an empty album yields index zero`() {
-        assertEquals(0, ScrapbookDesk.photoIndex(5, 2, 0))
+    fun `an empty album has an empty desk`() {
+        assertTrue(ScrapbookDesk.visible(0, 0).isEmpty())
+        assertNull(ScrapbookDesk.leaving(0, 0))
     }
 }

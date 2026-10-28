@@ -458,28 +458,6 @@ object SlideshowRenderer {
     }
 
     /** Polaroids settling onto a paper desk. */
-    /** One polaroid's place on the desk, in fractions of the frame. */
-    private data class DeskSlot(
-        val cx: Float,
-        val cy: Float,
-        val width: Float,
-        val rotation: Float,
-        val taped: Boolean,
-    )
-
-    /**
-     * Five polaroids fill the desk: three along the top, two along the bottom,
-     * each a little askew. Fixed places mean the wall never re-flows — only the
-     * photo in a slot changes, once per step.
-     */
-    private val deskSlots = listOf(
-        DeskSlot(0.195f, 0.255f, 0.280f, -6f, taped = true),
-        DeskSlot(0.500f, 0.225f, 0.262f, 3f, taped = false),
-        DeskSlot(0.805f, 0.258f, 0.285f, 6.5f, taped = true),
-        DeskSlot(0.315f, 0.672f, 0.290f, -4f, taped = false),
-        DeskSlot(0.690f, 0.685f, 0.285f, 4.5f, taped = true),
-    )
-
     private fun DrawScope.drawScrapbook(frame: SlideshowFrame, textMeasurer: TextMeasurer?) {
         val fit = frame.prefs.fitMode.isFit
         val w = size.width
@@ -501,22 +479,34 @@ object SlideshowRenderer {
             drawCircle(Color.Black.copy(alpha = 0.045f), radius = r, center = Offset(x, y))
         }
 
-        val index = frame.currentIndex
-        // The photo that just arrived lands on the next slot in the ring, so one
-        // polaroid is replaced per step and the other four stay put.
-        val newestSlot = ScrapbookDesk.newestSlot(index)
+        val visible = ScrapbookDesk.visible(frame.currentIndex, frame.count)
+        if (visible.isEmpty()) {
+            drawPlaceholder()
+            return
+        }
+        // The new card drops onto the pile over the first slice of the cycle;
+        // keying this off the cycle (not the transition) keeps it settled through
+        // the hold.
         val drop = Easing.backOut((frame.progress / 0.18f).coerceIn(0f, 1f), overshoot = 1.15f)
 
-        for (slot in deskSlots.indices) {
-            if (slot == newestSlot) continue
-            drawDeskCard(frame, slot, textMeasurer, fit, drop = 1f, newest = false)
+        // The card that no longer fits fades out underneath the pile.
+        ScrapbookDesk.leaving(frame.currentIndex, frame.count)?.let { going ->
+            if (drop < 1f) {
+                drawDeskCard(frame, going, textMeasurer, fit, drop = 1f - drop, caption = false)
+            }
         }
-
-        // The card leaving this slot fades out under the one dropping in.
-        if (drop < 1f) {
-            drawDeskCard(frame, newestSlot, textMeasurer, fit, drop = 1f - drop, newest = false)
+        // Oldest first, so the newest card lands on top of the pile.
+        for (rank in visible.indices.reversed()) {
+            val index = visible[rank]
+            drawDeskCard(
+                frame = frame,
+                photoIndex = index,
+                textMeasurer = textMeasurer,
+                fit = fit,
+                drop = if (rank == 0) drop else 1f,
+                caption = rank < ScrapbookDesk.CAPTIONED,
+            )
         }
-        drawDeskCard(frame, newestSlot, textMeasurer, fit, drop = drop, newest = true)
     }
 
     /**
@@ -525,55 +515,54 @@ object SlideshowRenderer {
      */
     private fun DrawScope.drawDeskCard(
         frame: SlideshowFrame,
-        slot: Int,
+        photoIndex: Int,
         textMeasurer: TextMeasurer?,
         fit: Boolean,
         drop: Float,
-        newest: Boolean,
+        caption: Boolean,
     ) {
-        val spec = deskSlots[slot]
-        if (frame.count <= 0) return
-        val photoIndex = ScrapbookDesk.photoIndex(frame.currentIndex, slot, frame.count)
         val photo = frame.photos.getOrNull(photoIndex) ?: return
-        // Tiles are plenty for a card this size and keep the full-frame cache free.
-        val bitmap = frame.bitmaps.full(photoIndex) ?: frame.bitmaps.tile(photoIndex)
+        val alpha = drop.coerceIn(0f, 1f)
+        if (alpha <= 0.01f) return
 
         val w = size.width
         val h = size.height
         val aspect = (photo.aspectRatio ?: 1.4f).coerceIn(0.7f, 2.0f)
-        // Polaroid proportions: 5% mat on each side and a 13% strip for the caption.
-        var cardW = w * spec.width
+        val place = ScrapbookDesk.placement(photo.id, aspect, w / h)
+
+        var cardW = w * place.width
         var cardH = cardW * (1.034f / aspect + 0.10f)
-        // Keep the whole card, caption strip included, clear of the screen edge
-        // and of the chrome that slides in along the bottom.
         val maxH = h * 0.42f
         if (cardH > maxH) {
             cardW *= maxH / cardH
             cardH = cardW * (1.034f / aspect + 0.10f)
         }
 
-        val alpha = drop.coerceIn(0f, 1f)
-        if (alpha <= 0.01f) return
         val lift = (1f - drop).coerceIn(0f, 1f)
         val scale = 0.94f + 0.06f * drop.coerceIn(0f, 1f)
-        // Nudge the card back inside the desk if a rotation or a tall portrait
-        // would otherwise push it past an edge.
         val halfW = cardW * scale / 2f
         val halfH = cardH * scale / 2f
-        val cx = (w * spec.cx).coerceIn(halfW + w * 0.012f, w - halfW - w * 0.012f)
-        val cy = (h * spec.cy + lift * h * 0.30f).coerceIn(halfH + h * 0.02f, h * 0.94f - halfH)
+        val cx = (w * place.cx).coerceIn(halfW + w * 0.01f, w - halfW - w * 0.01f)
+        val cy = (h * place.cy + lift * h * 0.35f)
+            .coerceIn(halfH + h * 0.02f, h * 0.94f - halfH)
 
-        val cardRect = Rect(
-            cx - cardW * scale / 2f,
-            cy - cardH * scale / 2f,
-            cx + cardW * scale / 2f,
-            cy + cardH * scale / 2f,
+        val cardRect = Rect(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+        // Tiles are plenty for a card this size and keep the full-frame cache free.
+        val bitmap = frame.bitmaps.full(photoIndex) ?: frame.bitmaps.tile(photoIndex)
+        drawPolaroid(
+            img = bitmap,
+            rect = cardRect,
+            rotation = place.rotation,
+            caption = if (caption) photo.caption else null,
+            textMeasurer = textMeasurer,
+            alpha = alpha,
+            fit = fit,
         )
-        drawPolaroid(bitmap, cardRect, spec.rotation, photo.caption, textMeasurer, alpha, fit = fit)
 
-        if (spec.taped || newest) {
-            val tapeAlpha = if (newest) ((drop - 0.65f) / 0.35f).coerceIn(0f, 1f) else alpha
-            if (tapeAlpha > 0.02f) drawTape(cardRect, spec.rotation, tapeAlpha)
+        // A little washi tape on every third card, so the pile reads as paper.
+        if (photo.id.hashCode().mod(3) == 0 || lift > 0f) {
+            val tapeAlpha = if (lift > 0f) ((drop - 0.65f) / 0.35f).coerceIn(0f, 1f) else alpha
+            if (tapeAlpha > 0.02f) drawTape(cardRect, place.rotation, tapeAlpha)
         }
     }
 
