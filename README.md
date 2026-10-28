@@ -130,8 +130,11 @@ Captions are sized relative to the canvas (`height * 0.052`), which is why a
 40 dp thumbnail and a 1080p frame both read correctly from one code path.
 
 The Photo Grid is laid out by `JustifiedGrid`: a dynamic program splits the page
-into rows so that every row is filled edge to edge at a similar height, then the
-heights are nudged so the mosaic meets all four screen edges. `GridPlan` owns the
+into rows so that every row is filled edge to edge at a similar height. A row's
+height is fixed by its photos' aspects, so a stack rarely adds up to the frame
+exactly; the finished mosaic is scaled uniformly to cover the frame and centred,
+which crops the surplus at the edges. Cells are never stretched — squeezing the
+rows to fit is what used to bend portrait photos into portrait-shaped holes. `GridPlan` owns the
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 

@@ -62,9 +62,15 @@ object JustifiedGrid {
         for (rowCount in 1..minOf(n, MAX_ROWS)) {
             val target = (height - gap * (rowCount + 1)) / rowCount
             if (target <= 1f) continue
-            val cuts = partition(aspects, rowCount, width, target, gap)
-            if (cuts == null) continue
-            val cost = cuts.cost
+            val cuts = partition(aspects, width, target, rowCount, gap) ?: continue
+            // Even rows first, then how close the whole stack comes to the frame:
+            // a split that leaves a wide strip of background is worse than one
+            // whose rows are a little less even.
+            // How much of the wall has to be cropped to meet the frame: a
+            // split whose rows add up to the frame height needs none.
+            val stack = cuts.rows.sumOf { it.height.toDouble() }.toFloat() + gap * (rowCount + 1)
+            val crop = kotlin.math.abs(stack - height) / maxOf(stack, height)
+            val cost = crop * 4f + cuts.cost
             if (cost < bestCost) {
                 bestCost = cost
                 bestRows = cuts.rows
@@ -87,9 +93,9 @@ object JustifiedGrid {
      */
     private fun partition(
         aspects: List<Float>,
-        rowCount: Int,
         width: Float,
         target: Float,
+        rowCount: Int,
         gap: Float,
     ): Partition? {
         val n = aspects.size
@@ -155,25 +161,43 @@ object JustifiedGrid {
         return Row(height, aspects.map { it * height })
     }
 
-    /** Places the rows top to bottom, nudging their heights so the stack fits exactly. */
+    /**
+     * Places the rows top to bottom without ever touching a cell's shape.
+     *
+     * A row's height is fixed by its photos' aspects — the row has to fill the
+     * width — so the stack height cannot be dialled in, and for most albums no
+     * split adds up to the frame exactly. Rather than squeeze the rows (which is
+     * what used to bend the photos), the finished mosaic is scaled uniformly to
+     * cover the frame and centred, so the surplus is cropped at the edges. Every
+     * cell keeps its photo's shape, and the wall is never narrower than the TV.
+     */
     private fun build(rows: List<Row>, width: Float, height: Float, gap: Float): List<GridRect> {
         if (rows.isEmpty()) return emptyList()
-        val inner = height - gap * (rows.size + 1)
+        val verticalGaps = rows.size + 1
         val natural = rows.sumOf { it.height.toDouble() }.toFloat()
-        // The wall must meet all four screen edges, so the rows absorb the
-        // difference; widths stay put and only the shared row height moves.
-        val scale = if (natural > 0f) (inner / natural).coerceIn(0.15f, 6f) else 1f
+        val stack = natural + gap * verticalGaps
+        // Cover, never shrink: a short stack grows until it meets both edges.
+        val scale = (height / stack).coerceAtLeast(1f)
+        val hGap = gap * scale
+        val vGap = gap * scale
+        // Centre by the outer margins, not by the mosaic box: the gaps are part
+        // of the mosaic, and counting them twice used to leave a band at the top.
+        val topMargin = (height - (natural * scale + (rows.size - 1) * vGap)) / 2f
+        // A justified row spans the frame minus one gap at each side.
+        val rowSpan = (width - 2f * gap) * scale
+        val leftMargin = (width - rowSpan) / 2f
 
         val out = ArrayList<GridRect>(rows.sumOf { it.widths.size })
-        var y = gap
+        var y = topMargin
         for (row in rows) {
-            val rowHeight = (row.height * scale).coerceAtLeast(1f)
-            var x = gap
+            val rowHeight = row.height * scale
+            var x = leftMargin
             for (tileWidth in row.widths) {
-                out.add(GridRect(x, y, x + tileWidth, y + rowHeight))
-                x += tileWidth + gap
+                val w = tileWidth * scale
+                out.add(GridRect(x, y, x + w, y + rowHeight))
+                x += w + hGap
             }
-            y += rowHeight + gap
+            y += rowHeight + vGap
         }
         return out
     }

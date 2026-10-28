@@ -26,20 +26,24 @@ class JustifiedGridTest {
         val maxBottom = rects.maxOf { it.bottom }
         val minLeft = rects.minOf { it.left }
         val maxRight = rects.maxOf { it.right }
-        assertEquals(gap, minTop, 0.5f)
-        assertEquals(gap, minLeft, 0.5f)
-        assertEquals(width - gap, maxRight, 1.5f)
-        assertEquals(height - gap, maxBottom, 1.5f)
+        // The wall covers the frame: it reaches or passes every edge, and the
+        // surplus is cropped evenly rather than squeezed into the photos.
+        // The wall covers the frame: at most a hairline of margin, and the
+        // surplus is cropped evenly rather than squeezed into the photos.
+        assertTrue("band at the left: $minLeft", minLeft <= width * 0.01f)
+        assertTrue("band at the right: $maxRight", maxRight >= width * 0.99f)
+        assertTrue("band at the top: $minTop", minTop <= height * 0.01f)
+        assertTrue("band at the bottom: $maxBottom", maxBottom >= height * 0.99f)
     }
 
     @Test
-    fun `every row is filled edge to edge`() {
+    fun `every row spans at least the frame`() {
         val rects = layout(1.5f, 0.8f, 1f, 1.77f, 1.33f, 0.66f, 1.5f, 1f)
         rects.groupBy { it.top }.values.forEach { row ->
             val left = row.minOf { it.left }
             val right = row.maxOf { it.right }
-            assertEquals(gap, left, 0.5f)
-            assertEquals(width - gap, right, 1.5f)
+            assertTrue("row starts right of the edge: $left", left <= gap + 0.5f)
+            assertTrue("row stops short of the edge: $right", right >= width - gap - 0.5f)
         }
     }
 
@@ -74,11 +78,14 @@ class JustifiedGridTest {
     }
 
     @Test
-    fun `a single photo still fills the frame`() {
+    fun `a single photo keeps its shape and fills the width`() {
         val rects = JustifiedGrid.layout(listOf(1.5f), width, height, gap)
         assertEquals(1, rects.size)
         assertEquals(width - gap, rects[0].right, 0.5f)
-        assertEquals(height - gap, rects[0].bottom, 0.5f)
+        assertEquals(1.5f, rects[0].width / rects[0].height, 0.02f)
+        // Taller than the screen, so it is centred and cropped evenly.
+        assertTrue(rects[0].top < 0f)
+        assertTrue(rects[0].bottom > height)
     }
 
     @Test
@@ -105,10 +112,58 @@ class JustifiedGridTest {
     }
 
     @Test
+    fun `every cell keeps its photo's aspect ratio`() {
+        val mixes = listOf(
+            List(12) { 1.333f },
+            List(12) { 0.75f },
+            listOf(1.33f, 0.77f, 1.33f, 0.75f, 1.33f, 1.33f, 1.33f, 1.33f, 1.68f, 1.33f, 1.33f, 1.33f),
+            listOf(1.5f, 0.66f, 2.0f, 1.0f, 0.8f, 1.78f, 0.75f, 1.33f),
+            listOf(0.45f, 2.6f, 1.0f, 1.4f, 0.9f),
+        )
+        for (aspects in mixes) {
+            val rects = JustifiedGrid.layout(aspects, width, height, gap)
+            assertEquals(aspects.size, rects.size)
+            rects.forEachIndexed { i, rect ->
+                assertEquals(
+                    "photo $i of $aspects was stretched",
+                    aspects[i],
+                    rect.width / rect.height,
+                    0.02f,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the wall still fills the frame`() {
+        val mixes = listOf(
+            List(12) { 1.333f },
+            List(9) { 0.75f },
+            listOf(1.33f, 0.77f, 1.33f, 0.75f, 1.33f, 1.33f, 1.33f, 1.33f, 1.68f, 1.33f, 1.33f, 1.33f),
+        )
+        for (aspects in mixes) {
+            val rects = JustifiedGrid.layout(aspects, width, height, gap)
+            val top = rects.minOf { it.top }
+            val bottom = rects.maxOf { it.bottom }
+            val used = (bottom - top) / height
+            assertTrue("wall only covers ${(used * 100).toInt()}% for $aspects", used > 0.99f)
+            assertTrue("wall starts below the top edge for $aspects", top <= height * 0.01f)
+            assertTrue("wall stops above the bottom edge for $aspects", bottom >= height * 0.99f)
+            // Whatever is cropped is cropped evenly, not all at one end.
+            // Equal overrun at both ends: the crop is shared, not dumped at one end.
+            assertTrue(
+                "crop is one sided for $aspects",
+                kotlin.math.abs(top + bottom - height) < height * 0.05f,
+            )
+        }
+    }
+
+    @Test
     fun `a phone sized box works too`() {
         val rects = JustifiedGrid.layout(List(9) { 1.4f }, 384f, 216f, 2f)
         assertEquals(9, rects.size)
-        assertEquals(216f - 2f, rects.maxOf { it.bottom }, 1f)
-        assertEquals(384f - 2f, rects.maxOf { it.right }, 1f)
+        assertTrue(rects.maxOf { it.right } >= 384f * 0.99f)
+        rects.forEach { assertEquals(1.4f, it.width / it.height, 0.02f) }
+        assertTrue(rects.maxOf { it.bottom } - rects.minOf { it.top } >= 216f - 2f)
     }
 }
