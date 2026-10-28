@@ -117,9 +117,19 @@ in the hole the old one leaves if it is the same hole. Re-cutting the wall every
 page was the first attempt and it folded flaps away from cells that no longer
 existed, opening black wedges onto the stage instead of onto a photograph.
 
-Most pages turn cell by cell, fanned across the wall in slot order; every fourth
-page turns the whole wall as one sheet, and each page picks its hinge — top,
-bottom, left or right — from the page's generation and the album's first photo.
+Most pages turn the whole wall, fanned across the cells in slot order or — every
+fourth — as one sheet; each page picks its hinge, top, bottom, left or right, from
+the page's generation and the album's first photo.
+
+**Every third page turns a single cell instead.** Replacing all six photographs
+every sixteen seconds is more motion than one photograph's worth of news can
+justify: one photo leaves, the next arrives in its place, and the rest of the wall
+stays exactly where it is. `OrigamiPlan` decides that, and it derives each cell's
+photo rather than accumulating it — page `p` sits `fullsBefore(p)` windows into
+the album — so any page can be computed on its own and the renderer stays
+stateless. The cell that turns on a single page is the one whose photo the *next*
+whole-wall turn would have brought in anyway, so a single turn neither repeats a
+photo nor skips one; it previews one cell of the wall that is coming.
 `OrigamiFold` holds that geometry as pure arithmetic: nine floats of a
 homography, plus the edge and sheet decisions. The free edge turns *away* from
 the viewer, so it is divided down by a perspective term and its corners converge

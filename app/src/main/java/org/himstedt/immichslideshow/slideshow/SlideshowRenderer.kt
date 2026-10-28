@@ -671,10 +671,12 @@ object SlideshowRenderer {
      * wall every page leaves flaps folding away from cells that no longer exist,
      * which opens black wedges onto the stage instead of onto a photograph.
      *
-     * Most pages turn cell by cell, fanned across the wall; every fourth turns the
-     * whole wall as one sheet. The fold is a real perspective projection rather
-     * than a squash — the free edge shrinks towards the hinge and its corners
-     * converge on the viewer's line of sight, which is what reads as paper.
+     * Most pages turn the whole wall, fanned across the cells or as one sheet;
+     * every third page turns a single cell, so the wall is alive between whole
+     * turns without replacing every photograph to say one thing. The fold is a
+     * real perspective projection rather than a squash — the free edge shrinks
+     * towards the hinge and its corners converge on the viewer's line of sight,
+     * which is what reads as paper.
      */
     private fun DrawScope.drawOrigami(frame: SlideshowFrame) {
         val w = size.width
@@ -684,45 +686,48 @@ object SlideshowRenderer {
         drawRect(Color(0xFF07080B))
 
         val slots = GridPlan.slotsForEffect(frame.effect, frame.gridSlots)
-        val page = GridPlan.pageAt(frame.elapsedMs, frame.count, slots)
+        val page = Math.floorDiv(frame.elapsedMs, GridPlan.PAGE_MS)
+        val local = (frame.elapsedMs - page * GridPlan.PAGE_MS).toFloat() / GridPlan.PAGE_MS
+        val wall = OrigamiPlan.wall(page, frame.count, slots)
         val gap = 3.dp.toPx()
         val cells = justifiedCells(frame, List(slots) { it }, w, h, gap)
-        if (cells.isEmpty()) {
+        if (cells.isEmpty() || wall.cells.isEmpty()) {
             drawPlaceholder()
             return
         }
 
         // The arriving wall is simply there, always: paper does not fade in, and
         // until a cell turns it is covered by the photo it is replacing.
-        page.tiles.forEach { tile ->
-            drawGridTile(frame.bitmaps.tile(tile.toIndex), cells.getOrNull(tile.slot), 1f)
+        wall.cells.forEachIndexed { slot, cell ->
+            drawGridTile(frame.bitmaps.tile(cell.to), cells.getOrNull(slot), 1f)
         }
-        if (page.generation <= 0L) return
+        if (page <= 0L) return
 
-        val seed = frame.photos.getOrNull(page.indices.firstOrNull() ?: 0)?.id?.hashCode()?.toLong() ?: 0L
-        val edge = OrigamiFold.edgeFor(page.generation, seed)
+        val seed = frame.photos.getOrNull(wall.cells.firstOrNull()?.to ?: 0)?.id?.hashCode()?.toLong() ?: 0L
+        val edge = OrigamiFold.edgeFor(page, seed)
         val camera = maxOf(w, h) * 2.2f
-        val sheet = OrigamiFold.sheetFor(page.generation, seed)
-        val local = (frame.elapsedMs - page.generation * GridPlan.PAGE_MS).toFloat() / GridPlan.PAGE_MS
+        val sheet = wall.full && OrigamiFold.sheetFor(page, seed)
         val sheetRect = GridRect(0f, 0f, w, h)
         val sheetTurn = if (sheet) Easing.smoothstep((local / SHEET_SPAN).coerceIn(0f, 1f)) else 0f
         val sheetFold = OrigamiFold.homography(sheetRect, edge, sheetTurn, camera, w / 2f, h / 2f)
+        // Cells fan across the wall in slot order; a single cell has no one to
+        // follow, so it turns on its own from the top of the page.
+        val fanSpread = if (wall.full) FAN_SPREAD else 0f
 
-        page.tiles.forEach { tile ->
-            val cell = cells.getOrNull(tile.slot) ?: return@forEach
-            // One sheet turns all at once; separate cells take their turn in
-            // sequence, which is what fans them across the wall.
+        wall.cells.forEachIndexed { slot, cell ->
+            if (!cell.turns) return@forEachIndexed
             val turn = if (sheet) {
                 sheetTurn
             } else {
-                val start = FAN_SPREAD * tile.slot / slots
+                val start = fanSpread * slot / slots
                 Easing.easeInOutCubic(((local - start) / FAN_SPAN).coerceIn(0f, 1f))
             }
-            if (turn >= 0.999f) return@forEach
-            val bitmap = frame.bitmaps.tile(tile.fromIndex) ?: return@forEach
-            val rect = Rect(cell.left, cell.top, cell.right, cell.bottom)
-            val fold = if (sheet) sheetFold else OrigamiFold.homography(cell, edge, turn, camera, w / 2f, h / 2f)
-            val shade = foldShade(edge, cell, turn)
+            if (turn >= 0.999f) return@forEachIndexed
+            val bitmap = frame.bitmaps.tile(cell.from) ?: return@forEachIndexed
+            val hole = cells.getOrNull(slot) ?: return@forEachIndexed
+            val rect = Rect(hole.left, hole.top, hole.right, hole.bottom)
+            val fold = if (sheet) sheetFold else OrigamiFold.homography(hole, edge, turn, camera, w / 2f, h / 2f)
+            val shade = foldShade(edge, hole, turn)
             if (sheet) {
                 // The whole wall is one sheet, so its cells are not clipped to
                 // their own holes: the sheet has to be free to leave them.

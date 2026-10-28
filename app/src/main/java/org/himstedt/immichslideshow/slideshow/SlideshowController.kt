@@ -143,9 +143,14 @@ class SlideshowController(
             // page size the renderer lays out with. A different size here means
             // a different window of photos, and every cell draws empty.
             val slots = GridPlan.slotsForEffect(prefs.effect, gridSlots)
-            for (i in GridPlan.prefetchIndices(elapsedMs, ordered.size, slots)) {
-                request(i, tile = true)
+            val indices = if (prefs.effect == SlideshowEffect.ORIGAMI) {
+                // The wall turns in pages of its own: two whole-wall turns and
+                // then a single cell, so its window is not the grid's.
+                OrigamiPlan.prefetch(Math.floorDiv(elapsedMs, GridPlan.PAGE_MS), ordered.size, slots)
+            } else {
+                GridPlan.prefetchIndices(elapsedMs, ordered.size, slots)
             }
+            for (i in indices) request(i, tile = true)
             return
         }
         if (prefs.effect == SlideshowEffect.SCRAPBOOK) {

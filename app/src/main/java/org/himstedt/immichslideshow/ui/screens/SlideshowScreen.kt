@@ -352,13 +352,17 @@ private fun SlideshowChrome(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${(info.index + 1).coerceAtMost(info.count)} / ${info.count}",
-                    color = titleColor,
-                    fontSize = 17.sp,
-                    letterSpacing = 1.6.sp,
-                )
-                Spacer(Modifier.height(4.dp))
+                // A wall has no "current photo", so a photo counter there would be
+                // counting something that is not on screen.
+                if (!info.effect.mosaic) {
+                    Text(
+                        text = "${(info.index + 1).coerceAtMost(info.count)} / ${info.count}",
+                        color = titleColor,
+                        fontSize = 17.sp,
+                        letterSpacing = 1.6.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 Text(
                     text = "▼ themes",
                     color = if (light) Color(0x992A2A2A) else Palette.MutedDim,
