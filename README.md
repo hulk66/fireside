@@ -100,9 +100,33 @@ Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`
 `slideshow_fit`) and are re-applied live while a show is running.
 
 `Fit` in the theme picker is the aspect-ratio switch: off (the default) crops
-each photo to fill the screen, on shows the whole frame with bars. The Photo
-Grid keeps filling regardless — it is a mosaic of crops, and letterboxing every
-tile would fill the wall with bars.
+each photo to fill the screen, on shows the whole frame with bars. The two walls
+— Photo Grid and Origami — keep filling regardless: they are mosaics of crops,
+and letterboxing every tile would fill the wall with bars.
+
+### Origami
+
+Origami is a wall, not a photo: a justified mosaic of four to seven photos,
+edge to edge, that turns over a page at a time. It is a `mosaic` effect, so it
+takes its timing from pages (16 s) rather than from slides, and the chrome says
+so — quoting the per-photo setting there would name a duration nothing obeys.
+
+The wall is cut **once**, from the album's own shapes, and keeps that shape all
+session. That is what makes the fold work: a cell can only reveal the next photo
+in the hole the old one leaves if it is the same hole. Re-cutting the wall every
+page was the first attempt and it folded flaps away from cells that no longer
+existed, opening black wedges onto the stage instead of onto a photograph.
+
+Most pages turn cell by cell, fanned across the wall in slot order; every fourth
+page turns the whole wall as one sheet, and each page picks its hinge — top,
+bottom, left or right — from the page's generation and the album's first photo.
+`OrigamiFold` holds that geometry as pure arithmetic: nine floats of a
+homography, plus the edge and sheet decisions. The free edge turns *away* from
+the viewer, so it is divided down by a perspective term and its corners converge
+on the viewer's line of sight — that trapezoid is the whole difference between
+paper and a squash, and it is why the transform cannot be a Compose
+`withTransform`: those are affine. The homography goes onto the native canvas,
+which applies perspective to everything drawn inside it.
 
 ## Architecture
 
@@ -110,7 +134,7 @@ tile would fill the wall with bars.
 data/          Immich REST client (Retrofit + kotlinx.serialization), config,
                repository, prefs, demo artwork generator, bitmap source
 slideshow/     pure playback core: effects, timing, motion, easing, RNG,
-               frame model, controller (clock + caches), renderer
+               frame model, fold geometry, controller (clock + caches), renderer
 ui/            theme, shared components, screens (setup, albums, player,
                theme picker) and the four-route navigator
 ```

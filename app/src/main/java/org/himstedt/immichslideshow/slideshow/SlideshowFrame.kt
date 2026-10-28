@@ -117,6 +117,20 @@ object GridPlan {
         return (16f / average).toInt().coerceIn(9, 21)
     }
 
+    /**
+     * Origami folds a few big sheets, not a dense mosaic: half the Photo Grid's
+     * page, and never so few that a fold is not a wall.
+     */
+    fun foldSlots(mosaicSlots: Int): Int = (mosaicSlots / 2).coerceIn(4, 7)
+
+    /**
+     * Page size for an effect. The renderer and the prefetcher both go through
+     * here: a different window of photos between them means every cell draws
+     * empty.
+     */
+    fun slotsForEffect(effect: SlideshowEffect, mosaicSlots: Int): Int =
+        if (effect == SlideshowEffect.ORIGAMI) foldSlots(mosaicSlots) else mosaicSlots
+
     /** How long one page of photos stays up. */
     const val PAGE_MS = 16_000L
 

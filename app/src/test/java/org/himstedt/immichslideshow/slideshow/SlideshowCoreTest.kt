@@ -389,9 +389,22 @@ class SlideshowEffectTest {
     }
 
     @Test
-    fun `only photo grid is a mosaic`() {
+    fun `the two walls are mosaics`() {
+        // Both paint a whole wall of photos instead of one photo at a time, so
+        // both take their timing from pages rather than from slides.
         val mosaics = SlideshowEffect.entries.filter { it.mosaic }
-        assertEquals(listOf(SlideshowEffect.PHOTO_GRID), mosaics)
+        assertEquals(listOf(SlideshowEffect.ORIGAMI, SlideshowEffect.PHOTO_GRID), mosaics.sortedBy { it.ordinal })
+    }
+
+    @Test
+    fun `origami folds fewer, bigger sheets than the photo grid`() {
+        val album = GridPlan.slotsFor(listOf(1.33f, 0.75f, 1.5f))
+        val fold = GridPlan.slotsForEffect(SlideshowEffect.ORIGAMI, album)
+        assertTrue("origami should fold fewer cells than the grid: $fold of $album", fold < album)
+        assertTrue("a fold of $fold cells is not a wall", fold >= 4)
+        // Everything else lays out exactly as before.
+        assertEquals(album, GridPlan.slotsForEffect(SlideshowEffect.PHOTO_GRID, album))
+        assertEquals(album, GridPlan.slotsForEffect(SlideshowEffect.KEN_BURNS, album))
     }
 
     @Test

@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -61,7 +62,11 @@ object SlideshowRenderer {
         val lightStage = frame.effect == SlideshowEffect.SCRAPBOOK ||
             frame.effect == SlideshowEffect.REFLECTIONS
         if (frame.prefs.vignette && !lightStage) drawVignette(0.5f)
-        if (frame.effect != SlideshowEffect.SCRAPBOOK && frame.effect != SlideshowEffect.PHOTO_GRID) {
+        // The two walls fill the frame on purpose; a caption would sit on a photo.
+        if (frame.effect != SlideshowEffect.SCRAPBOOK &&
+            frame.effect != SlideshowEffect.PHOTO_GRID &&
+            frame.effect != SlideshowEffect.ORIGAMI
+        ) {
             drawCaption(
                 frame = frame,
                 textMeasurer = textMeasurer,
@@ -657,90 +662,115 @@ object SlideshowRenderer {
         }
     }
 
-    /** Triangular facets turn and fold like cut paper. */
+    /**
+     * Origami: a justified wall of photos whose cells turn over like paper.
+     *
+     * The wall is cut once, from the album's own shapes, and keeps that shape all
+     * session. That is what makes the fold work: a cell can only reveal the next
+     * photo in the hole the old one leaves if it is the same hole. Re-cutting the
+     * wall every page leaves flaps folding away from cells that no longer exist,
+     * which opens black wedges onto the stage instead of onto a photograph.
+     *
+     * Most pages turn cell by cell, fanned across the wall; every fourth turns the
+     * whole wall as one sheet. The fold is a real perspective projection rather
+     * than a squash — the free edge shrinks towards the hinge and its corners
+     * converge on the viewer's line of sight, which is what reads as paper.
+     */
     private fun DrawScope.drawOrigami(frame: SlideshowFrame) {
-        val fit = frame.prefs.fitMode.isFit
-        val full = Rect(Offset.Zero, size)
-        val cols = 4
-        val rows = 3
-        val cw = size.width / cols
-        val ch = size.height / rows
-        val cur = frame.bitmaps.full(frame.currentIndex)
-        val next = frame.bitmaps.full(frame.nextIndex)
-        val under = next ?: cur
+        val w = size.width
+        val h = size.height
+        // What shows in the seams between sheets, and under a sheet that is
+        // edge-on: shadow, not a photograph.
+        drawRect(Color(0xFF07080B))
 
-        if (under != null) {
-            val vp = pushInViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
-            drawCropped(under, full, vp.zoom * 1.03f, vp.focusX, vp.focusY, fit = fit)
-        } else {
+        val slots = GridPlan.slotsForEffect(frame.effect, frame.gridSlots)
+        val page = GridPlan.pageAt(frame.elapsedMs, frame.count, slots)
+        val gap = 3.dp.toPx()
+        val cells = justifiedCells(frame, List(slots) { it }, w, h, gap)
+        if (cells.isEmpty()) {
             drawPlaceholder()
-        }
-        if (cur == null) return
-
-        // At rest the 24 clipped facets would leave hairline seams along every
-        // crease, so paint the untouched frame in one go instead.
-        if (frame.transition <= 0.0001f) {
-            drawCropped(cur, full, 1f, 0.5f, 0.5f, fit = fit)
             return
         }
 
-        val total = cols * rows * 2
-        var facet = 0
-        for (row in 0 until rows) {
-            for (col in 0 until cols) {
-                val x0 = col * cw
-                val y0 = row * ch
-                val x1 = x0 + cw
-                val y1 = y0 + ch
-                val descending = (row + col) % 2 == 0
+        // The arriving wall is simply there, always: paper does not fade in, and
+        // until a cell turns it is covered by the photo it is replacing.
+        page.tiles.forEach { tile ->
+            drawGridTile(frame.bitmaps.tile(tile.toIndex), cells.getOrNull(tile.slot), 1f)
+        }
+        if (page.generation <= 0L) return
 
-                val triangles = if (descending) {
-                    listOf(
-                        triangleOf(x0, y0, x1, y0, x0, y1),
-                        triangleOf(x1, y0, x1, y1, x0, y1),
-                    )
-                } else {
-                    listOf(
-                        triangleOf(x0, y0, x1, y0, x1, y1),
-                        triangleOf(x0, y0, x1, y1, x0, y1),
-                    )
+        val seed = frame.photos.getOrNull(page.indices.firstOrNull() ?: 0)?.id?.hashCode()?.toLong() ?: 0L
+        val edge = OrigamiFold.edgeFor(page.generation, seed)
+        val camera = maxOf(w, h) * 2.2f
+        val sheet = OrigamiFold.sheetFor(page.generation, seed)
+        val local = (frame.elapsedMs - page.generation * GridPlan.PAGE_MS).toFloat() / GridPlan.PAGE_MS
+        val sheetRect = GridRect(0f, 0f, w, h)
+        val sheetTurn = if (sheet) Easing.smoothstep((local / SHEET_SPAN).coerceIn(0f, 1f)) else 0f
+        val sheetFold = OrigamiFold.homography(sheetRect, edge, sheetTurn, camera, w / 2f, h / 2f)
+
+        page.tiles.forEach { tile ->
+            val cell = cells.getOrNull(tile.slot) ?: return@forEach
+            // One sheet turns all at once; separate cells take their turn in
+            // sequence, which is what fans them across the wall.
+            val turn = if (sheet) {
+                sheetTurn
+            } else {
+                val start = FAN_SPREAD * tile.slot / slots
+                Easing.easeInOutCubic(((local - start) / FAN_SPAN).coerceIn(0f, 1f))
+            }
+            if (turn >= 0.999f) return@forEach
+            val bitmap = frame.bitmaps.tile(tile.fromIndex) ?: return@forEach
+            val rect = Rect(cell.left, cell.top, cell.right, cell.bottom)
+            val fold = if (sheet) sheetFold else OrigamiFold.homography(cell, edge, turn, camera, w / 2f, h / 2f)
+            val shade = foldShade(edge, cell, turn)
+            if (sheet) {
+                // The whole wall is one sheet, so its cells are not clipped to
+                // their own holes: the sheet has to be free to leave them.
+                withPerspective(fold) {
+                    drawCropped(bitmap, rect, 1f, 0.5f, 0.5f, fit = false)
+                    drawRect(shade, rect.topLeft, rect.size)
                 }
-
-                for (triangle in triangles) {
-                    val local = stagger(frame.transition, facet, total, spread = 0.7f)
-                    val e = Easing.easeInOutCubic(local)
-                    val direction = if (facet % 2 == 0) 1f else -1f
-                    facet++
-                    if (e >= 0.999f) continue
-
-                    val bounds = triangle.getBounds()
-                    val pivot = bounds.center
-                    val rotation = 48f * direction * e
-                    val shrink = 1f - 0.92f * e
-                    withTransform({
-                        rotate(rotation, pivot)
-                        scale(shrink, shrink, pivot)
-                    }) {
-                        clipPath(triangle) {
-                            drawCropped(cur, full, 1f, 0.5f, 0.5f, alpha = 1f - e * 0.95f, fit = fit)
-                            // Paper sheen sweeping across the facet
-                            drawRect(
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.14f * e),
-                                        Color.Transparent,
-                                    ),
-                                    start = Offset(bounds.left, bounds.top),
-                                    end = Offset(bounds.right, bounds.bottom),
-                                ),
-                                topLeft = bounds.topLeft,
-                                size = bounds.size,
-                            )
-                        }
+            } else {
+                clipPath(Path().apply { addRect(rect) }) {
+                    withPerspective(fold) {
+                        drawCropped(bitmap, rect, 1f, 0.5f, 0.5f, fit = false)
+                        drawRect(shade, rect.topLeft, rect.size)
                     }
                 }
             }
         }
+    }
+
+    /** Shadow across a turning cell, darkest at its free edge. */
+    private fun foldShade(edge: OrigamiFold.Edge, cell: GridRect, turned: Float): Brush {
+        val strength = OrigamiFold.shadeStrength(turned)
+        val clear = Color.Transparent
+        val dark = Color.Black.copy(alpha = strength)
+        return when (edge) {
+            // The hinge is the lit end; the free edge is the one in shadow.
+            OrigamiFold.Edge.BOTTOM -> Brush.verticalGradient(listOf(dark, clear), cell.top, cell.bottom)
+            OrigamiFold.Edge.TOP -> Brush.verticalGradient(listOf(clear, dark), cell.top, cell.bottom)
+            OrigamiFold.Edge.LEFT -> Brush.horizontalGradient(listOf(clear, dark), cell.left, cell.right)
+            OrigamiFold.Edge.RIGHT -> Brush.horizontalGradient(listOf(dark, clear), cell.left, cell.right)
+        }
+    }
+
+    /**
+     * Draws [block] through a projective homography — nine floats, row-major.
+     *
+     * Compose's own draw transforms are affine, and the whole point of the fold
+     * is that it is not: the free edge has to come out shorter than the hinge
+     * edge. So the homography goes onto the underlying canvas, which applies
+     * perspective to everything drawn inside it.
+     */
+    private inline fun DrawScope.withPerspective(homography: FloatArray, block: DrawScope.() -> Unit) {
+        val canvas = drawContext.canvas.nativeCanvas
+        val matrix = android.graphics.Matrix()
+        matrix.setValues(homography)
+        val save = canvas.save()
+        canvas.concat(matrix)
+        block()
+        canvas.restoreToCount(save)
     }
 
     /** A living mosaic of the whole album. */
@@ -1091,13 +1121,12 @@ object SlideshowRenderer {
         )
     }
 
-    private fun triangleOf(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): Path =
-        Path().apply {
-            moveTo(ax, ay)
-            lineTo(bx, by)
-            lineTo(cx, cy)
-            close()
-        }
+    /** Share of a page over which a whole-sheet fold turns over. */
+    private const val SHEET_SPAN = 0.24f
+
+    /** Share of a page one cell takes to turn, and how far the cells fan out. */
+    private const val FAN_SPAN = 0.10f
+    private const val FAN_SPREAD = 0.10f
 
     private const val HALF_PI = (Math.PI / 2).toFloat()
 }

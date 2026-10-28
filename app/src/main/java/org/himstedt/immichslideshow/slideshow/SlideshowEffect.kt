@@ -56,8 +56,9 @@ enum class SlideshowEffect(
     ),
     ORIGAMI(
         title = "Origami",
-        tagline = "Facets fold and turn like cut paper",
+        tagline = "A wall of photos turns over like sheets of paper",
         transitionFraction = 0.28f,
+        mosaic = true,
     ),
     PHOTO_GRID(
         title = "Photo Grid",

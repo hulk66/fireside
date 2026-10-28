@@ -142,7 +142,8 @@ class SlideshowController(
             // Exactly the wall's own window plus the next page, using the same
             // page size the renderer lays out with. A different size here means
             // a different window of photos, and every cell draws empty.
-            for (i in GridPlan.prefetchIndices(elapsedMs, ordered.size, gridSlots)) {
+            val slots = GridPlan.slotsForEffect(prefs.effect, gridSlots)
+            for (i in GridPlan.prefetchIndices(elapsedMs, ordered.size, slots)) {
                 request(i, tile = true)
             }
             return
@@ -213,6 +214,15 @@ class SlideshowController(
     private fun step(direction: Int) {
         val count = photos.size
         if (count == 0) return
+        if (prefs.effect.mosaic) {
+            // A mosaic has no per-photo steps: one press is one page of the wall.
+            // Stepping by a slide cycle instead would land mid-page and change
+            // nothing on screen, which read as the remote not working.
+            val page = Math.floorDiv(elapsedMs, GridPlan.PAGE_MS)
+            elapsedMs = ((page + direction).coerceAtLeast(0L)) * GridPlan.PAGE_MS
+            emit()
+            return
+        }
         val index = timeline.indexAt(elapsedMs, count)
         val target = ((index + direction) % count + count) % count
         elapsedMs = timeline.elapsedForSlide(target)
