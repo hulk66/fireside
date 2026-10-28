@@ -51,14 +51,24 @@ object SlideshowRenderer {
             SlideshowEffect.FLIP -> drawFlip(frame)
             SlideshowEffect.FOLD -> drawFold(frame)
             SlideshowEffect.SHIFTING_TILES -> drawShiftingTiles(frame)
-            SlideshowEffect.REFLECTIONS -> drawReflections(frame)
+            SlideshowEffect.REFLECTIONS -> drawReflections(frame, textMeasurer)
             SlideshowEffect.SCRAPBOOK -> drawScrapbook(frame, textMeasurer)
             SlideshowEffect.ORIGAMI -> drawOrigami(frame)
             SlideshowEffect.PHOTO_GRID -> drawPhotoGrid(frame)
         }
-        if (frame.prefs.vignette) drawVignette(0.5f)
+        // A vignette darkens the corners: wrong on the two themes with a light
+        // stage, where it reads as grime rather than as depth.
+        val lightStage = frame.effect == SlideshowEffect.SCRAPBOOK ||
+            frame.effect == SlideshowEffect.REFLECTIONS
+        if (frame.prefs.vignette && !lightStage) drawVignette(0.5f)
         if (frame.effect != SlideshowEffect.SCRAPBOOK && frame.effect != SlideshowEffect.PHOTO_GRID) {
-            drawCaption(frame, textMeasurer, captionAlpha(frame))
+            drawCaption(
+                frame = frame,
+                textMeasurer = textMeasurer,
+                alpha = captionAlpha(frame),
+                dark = frame.effect == SlideshowEffect.REFLECTIONS,
+                fontScale = if (frame.effect == SlideshowEffect.REFLECTIONS) 0.036f else 0.052f,
+            )
         }
     }
 
@@ -76,37 +86,54 @@ object SlideshowRenderer {
         }.coerceIn(0f, 1f)
     }
 
-    private fun DrawScope.drawCaption(frame: SlideshowFrame, textMeasurer: TextMeasurer?, alpha: Float) {
+    /**
+     * The date and place line. [dark] is for the light stage, which needs dark
+     * type and no black scrim under it.
+     */
+    private fun DrawScope.drawCaption(
+        frame: SlideshowFrame,
+        textMeasurer: TextMeasurer?,
+        alpha: Float,
+        dark: Boolean = false,
+        fontScale: Float = 0.052f,
+    ) {
         if (alpha <= 0.01f || textMeasurer == null) return
         val text = frame.currentPhoto?.caption?.takeIf { it.isNotBlank() } ?: return
 
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f * alpha)),
-                startY = size.height * 0.72f,
-                endY = size.height,
-            ),
-        )
+        if (!dark) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f * alpha)),
+                    startY = size.height * 0.72f,
+                    endY = size.height,
+                ),
+            )
+        }
 
         // Sized from the canvas so the same renderer reads correctly on a TV
         // and inside a small theme-preview tile.
-        val captionPx = (size.height * 0.052f).coerceAtLeast(10f)
+        val captionPx = (size.height * fontScale).coerceAtLeast(10f)
         val style = TextStyle(
-            color = Color.White.copy(alpha = 0.94f * alpha),
+            color = if (dark) Color(0xFF2B2B2B).copy(alpha = alpha) else Color.White.copy(alpha = 0.94f * alpha),
             fontSize = captionPx.toSp(),
             fontWeight = FontWeight.Light,
             letterSpacing = (captionPx * 0.02f).toSp(),
-            shadow = Shadow(
-                color = Color.Black.copy(alpha = 0.65f * alpha),
-                offset = Offset(0f, captionPx * 0.05f),
-                blurRadius = captionPx * 0.20f,
-            ),
+            shadow = if (dark) {
+                null
+            } else {
+                Shadow(
+                    color = Color.Black.copy(alpha = 0.65f * alpha),
+                    offset = Offset(0f, captionPx * 0.05f),
+                    blurRadius = captionPx * 0.20f,
+                )
+            },
         )
         val layout = textMeasurer.measure(text = text, style = style, maxLines = 1)
         drawText(
             textLayoutResult = layout,
             topLeft = Offset(
                 size.width * 0.062f,
+                // Above the playback chrome, which slides over the bottom fifth.
                 size.height * 0.885f - layout.size.height,
             ),
         )
@@ -356,96 +383,86 @@ object SlideshowRenderer {
         // appear while a tile is actually moving.
     }
 
-    /** A floating photo with its mirrored echo on dark water. */
-    private fun DrawScope.drawReflections(frame: SlideshowFrame) {
+    /**
+     * Photos on a bright stage, with a soft smear of themselves underneath.
+     *
+     * Most steps show a collage of three; every few steps a single photo takes
+     * the whole stage. The stage is white on purpose: a reflection only reads as
+     * a reflection when there is something for it to sit on, and a dark smear of
+     * a dark photo on a dark background disappears.
+     */
+    private fun DrawScope.drawReflections(frame: SlideshowFrame, textMeasurer: TextMeasurer?) {
         val fit = frame.prefs.fitMode.isFit
         val w = size.width
         val h = size.height
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(Color(0xFF11151F), Color(0xFF06070B), Color(0xFF020305)),
-                startY = 0f,
-                endY = h,
-            ),
-        )
+        drawRect(Color(0xFFF7F5F1))
 
-        val floatY = sin(frame.elapsedMs / 2400f) * 4f
         val p = Easing.easeInOutCubic(frame.transition)
+        val gap = 6.dp.toPx()
+        // As much of the frame as the photos can have: the caption below needs
+        // one line, not a band.
+        val box = GridRect(w * 0.03f, h * 0.03f, w * 0.97f, h * 0.745f)
+        val baseline = box.bottom
 
-        // The wall: a few photos side by side, sharing one baseline so a single
-        // reflection strip can run under all of them.
-        val box = GridRect(w * 0.06f, h * 0.05f + floatY, w * 0.94f, h * 0.70f + floatY)
-
-        // Warm glow behind the wall
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Color(0x33FFB27A), Color(0x00000000)),
-                center = Offset(w * 0.5f, h * 0.36f),
-                radius = max(w, h) * 0.6f,
-            ),
-            radius = max(w, h) * 0.6f,
-            center = Offset(w * 0.5f, h * 0.36f),
-        )
-
-        val cells = ReflectionsWall.visible(frame.currentIndex, frame.count)
-        if (cells.isEmpty()) {
-            drawPlaceholder(Rect(box.left, box.top, box.right, box.bottom))
+        val index = frame.currentIndex
+        if (ReflectionsWall.visible(index, frame.count).isEmpty()) {
+            drawPlaceholder(Rect(box.left, box.top, box.right, baseline))
             return
         }
-        val aspects = cells.map { frame.photos.getOrNull(it)?.aspectRatio ?: 1.5f }
-        val cells2 = ReflectionsWall.layout(aspects, box, gap = 6.dp.toPx())
-        if (cells2.isEmpty()) return
-        val newest = ReflectionsWall.newestCell(frame.currentIndex, frame.count)
         val mix = (frame.progress / 0.22f).coerceIn(0f, 1f)
+        val modeChanged = ReflectionsWall.modeChangesAt(index)
 
-        for (cell in cells.indices) {
-            val place = cells2.getOrNull(cell) ?: continue
-            val rect = Rect(place.left, place.top, place.right, place.bottom)
-            val current = frame.bitmaps.full(cells[cell])
-            if (cell == newest && mix < 1f) {
-                // The new photo cross-fades in over the one this cell held.
-                val previous = ReflectionsWall.photoIndex(frame.currentIndex - 1, cell, frame.count)
-                frame.bitmaps.full(previous)?.let {
-                    drawFloatingPhoto(it, rect, alpha = 1f - mix, fit = fit)
-                }
-                if (current != null) drawFloatingPhoto(current, rect, alpha = mix, fit = fit)
-            } else if (current != null) {
-                drawFloatingPhoto(current, rect, fit = fit)
-            } else {
-                drawPlaceholder(rect)
+        // The stage crops the wall, so a wall scaled up to fill the width loses
+        // the top of its tallest column instead of running over the chrome.
+        clipRect(box.left, 0f, box.right, baseline) {
+            if (modeChanged && mix < 1f) {
+                // One photo becoming three (or back) re-flows the whole wall, so
+                // the two arrangements cross-fade as a whole.
+                drawWall(frame, index - 1, fit, box, gap, alpha = 1f - mix, newestMix = 1f)
             }
+            drawWall(
+                frame = frame,
+                index = index,
+                fit = fit,
+                box = box,
+                gap = gap,
+                alpha = if (modeChanged) mix else 1f,
+                newestMix = if (modeChanged) 1f else mix,
+            )
         }
 
-        // One short, soft smear under the whole wall: the reflection is a hint of
-        // depth, not a second picture.
-        val baseline = box.bottom
-        val gap = h * 0.008f
-        val stripTop = baseline + gap
-        val stripHeight = min(box.height * 0.17f, h - stripTop)
+        // One short smear under the whole wall, mirrored and faded to the stage.
+        val stripTop = baseline + h * 0.006f
+        val stripHeight = min(h * 0.095f, h - stripTop)
         if (stripHeight <= 1f) return
         val strip = Rect(box.left, stripTop, box.right, stripTop + stripHeight)
+        val cells = ReflectionsWall.visible(index, frame.count)
+        val aspects = cells.map { frame.photos.getOrNull(it)?.aspectRatio ?: 1.5f }
+        val rects = ReflectionsWall.layout(aspects, box, gap)
 
         clipRect(strip.left, strip.top, strip.right, strip.bottom) {
-            withTransform({ scale(1f, -0.45f, Offset((box.left + box.right) / 2f, stripTop)) }) {
-                for (cell in cells.indices) {
-                    val place = cells2.getOrNull(cell) ?: continue
-                    val bitmap = frame.bitmaps.full(cells[cell]) ?: continue
+            // A hint of glass: a hair lighter than the stage behind the smear.
+            drawRect(Color(0x08000000), topLeft = strip.topLeft, size = strip.size)
+            withTransform({ scale(1f, -0.42f, Offset((strip.left + strip.right) / 2f, stripTop)) }) {
+                cells.forEachIndexed { cell, photoIndex ->
+                    val place = rects.getOrNull(cell) ?: return@forEachIndexed
+                    val bitmap = frame.bitmaps.full(photoIndex) ?: return@forEachIndexed
                     drawCropped(
                         img = bitmap,
                         dst = Rect(place.left, place.top, place.right, place.bottom),
-                        alpha = 0.34f,
+                        alpha = 0.30f,
                         fit = fit,
                         backdrop = Color.Transparent,
                     )
                 }
             }
-            // Fade out quickly, so the smear never turns into a hard edge.
+            // Fade to the stage, so the smear has no hard bottom edge.
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0A0C12).copy(alpha = 0.30f),
-                        Color(0xFF06070B).copy(alpha = 0.80f),
-                        Color(0xFF020305),
+                        Color(0xFFF7F5F1).copy(alpha = 0.25f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.72f),
+                        Color(0xFFF7F5F1),
                     ),
                     startY = strip.top,
                     endY = strip.bottom,
@@ -454,13 +471,50 @@ object SlideshowRenderer {
                 size = strip.size,
             )
         }
-        // A soft sheen where the wall meets the glass.
+        // A hairline where the wall meets the glass.
         drawLine(
-            color = Color(0xFFFFD9A8).copy(alpha = 0.14f),
+            color = Color.Black.copy(alpha = 0.10f),
             start = Offset(box.left, stripTop),
             end = Offset(box.right, stripTop),
-            strokeWidth = 1.5f,
+            strokeWidth = 1f,
         )
+    }
+
+    /** Paints one arrangement of the wall; [newestMix] cross-fades the cell that changed. */
+    private fun DrawScope.drawWall(
+        frame: SlideshowFrame,
+        index: Int,
+        fit: Boolean,
+        box: GridRect,
+        gap: Float,
+        alpha: Float,
+        newestMix: Float,
+    ) {
+        val cells = ReflectionsWall.visible(index, frame.count)
+        if (cells.isEmpty() || alpha <= 0.01f) return
+        val aspects = cells.map { frame.photos.getOrNull(it)?.aspectRatio ?: 1.5f }
+        val rects = ReflectionsWall.layout(aspects, box, gap)
+        val newest = ReflectionsWall.newestCell(index, frame.count)
+
+        cells.forEachIndexed { cell, photoIndex ->
+            val place = rects.getOrNull(cell) ?: return@forEachIndexed
+            val rect = Rect(place.left, place.top, place.right, place.bottom)
+            val current = frame.bitmaps.full(photoIndex)
+            if (cell == newest && newestMix < 1f) {
+                // The new photo cross-fades in over the one this cell held.
+                val previous = ReflectionsWall.photoIndex(index - 1, cell, frame.count)
+                frame.bitmaps.full(previous)?.let {
+                    drawFloatingPhoto(it, rect, alpha = (1f - newestMix) * alpha, fit = fit)
+                }
+                if (current != null) {
+                    drawFloatingPhoto(current, rect, alpha = newestMix * alpha, fit = fit)
+                }
+            } else if (current != null) {
+                drawFloatingPhoto(current, rect, alpha = alpha, fit = fit)
+            } else if (alpha > 0.5f) {
+                drawPlaceholder(rect)
+            }
+        }
     }
 
     /** Polaroids settling onto a paper desk. */

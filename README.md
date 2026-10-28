@@ -17,8 +17,9 @@ full-screen show and the animated thumbnails in the theme picker.
   Reflections, Scrapbook, Origami, Photo Grid.
 - **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
   whole in their original aspect ratio on a dark backdrop.
-- **Reflections** — photos on dark glass, one big portrait column beside two
-  stacked landscapes, all sharing a baseline and a single soft reflection smear.
+- **Reflections** — a bright stage where most steps are a collage (a tall column
+  beside two stacked photos, sharing one baseline and one reflection smear) and
+  roughly one step in three is a single big photo.
 - **Flickr-style Photo Grid** — photos keep their aspect ratio, rows are
   justified edge to edge, and the wall turns over one calm page at a time.
 - **Live theme picker** — every tile is an animated preview rendered by the real
@@ -158,13 +159,21 @@ and every cell comes up empty. A unit test pins that invariant. `GridPlan` owns 
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
-The Reflections wall is three photos at once (`ReflectionsWall`): the most
-portrait one takes a tall column, the other two stack beside it, and their width
-is solved so the stack is exactly as tall as the column. Every cell keeps its own
-aspect ratio, all cells share one baseline, and one short smear mirrors the whole
-wall underneath. Cells are a ring like the scrapbook desk, so exactly one photo
-changes per step and the rest of the wall stays still. An album of one or two
-photos falls back to a single big photo / two equal columns.
+The Reflections wall (`ReflectionsWall`) shows three photos on 70 % of the steps
+and one big photo on the other 30 % — steps 3, 7 and 9 of each ten, so the single
+photo arrives here and there rather than in runs. Collage steps put the photo that
+best fills the width in the tall column (a landscape fills a 16:9 frame far better
+than a portrait does), stack the other two beside it with their width solved so
+the stack is exactly as tall as the column, then scale the wall up to meet the
+frame edges. Every cell keeps its own aspect ratio, all cells share one baseline,
+and one short smear mirrors the whole wall underneath. Inside a mode the cells are
+a ring like the scrapbook desk, so exactly one photo changes per step; a step that
+switches between one and three photos cross-fades the two arrangements whole.
+
+The stage is white, because a reflection only reads as a reflection when there is
+something for it to sit on: a dark smear of a dark photo on a dark background
+disappears. That also means no vignette and no black caption scrim on this theme —
+the caption is smaller, dark, and sits above the chrome.
 
 The Scrapbook desk is a pile of up to twenty polaroids. Each card keeps the place
 it was given when it arrived — the spot is derived from the photo id, so a card

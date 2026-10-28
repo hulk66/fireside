@@ -11,6 +11,41 @@ class ReflectionsWallTest {
     private val gap = 6f
 
     @Test
+    fun `roughly seventy percent of steps are a collage`() {
+        val modes = (0 until 100).map { ReflectionsWall.modeFor(it) }
+        val collage = modes.count { it == ReflectionsWall.Mode.Collage }
+        assertEquals("collage share was $collage %", 70, collage)
+    }
+
+    @Test
+    fun `single steps are spread out, not in one run`() {
+        val modes = (0 until 10).map { ReflectionsWall.modeFor(it) }
+        val longestRun = modes.fold(0 to 0) { (best, run), mode ->
+            val next = if (mode == ReflectionsWall.Mode.Single) run + 1 else 0
+            maxOf(best, next) to next
+        }.first
+        assertTrue("single steps clump: $modes", longestRun <= 1)
+    }
+
+    @Test
+    fun `a single step shows exactly one photo`() {
+        val single = (0 until 10).first { ReflectionsWall.modeFor(it) == ReflectionsWall.Mode.Single }
+        assertEquals(1, ReflectionsWall.visible(single, 340).size)
+        assertEquals(1, ReflectionsWall.cellsFor(single, 340))
+        // And a collage step shows three.
+        val collage = (0 until 10).first { ReflectionsWall.modeFor(it) == ReflectionsWall.Mode.Collage }
+        assertEquals(3, ReflectionsWall.visible(collage, 340).size)
+    }
+
+    @Test
+    fun `mode changes are detected at the right step`() {
+        for (index in 1 until 30) {
+            val expected = ReflectionsWall.modeFor(index) != ReflectionsWall.modeFor(index - 1)
+            assertEquals("step $index", expected, ReflectionsWall.modeChangesAt(index))
+        }
+    }
+
+    @Test
     fun `each cell holds a different photo`() {
         val shown = ReflectionsWall.visible(10, 340)
         assertEquals(3, shown.size)
@@ -18,10 +53,12 @@ class ReflectionsWallTest {
     }
 
     @Test
-    fun `exactly one cell changes per step`() {
-        for (index in 1 until 12) {
+    fun `exactly one cell changes per step inside a mode`() {
+        for (index in 1 until 30) {
+            if (ReflectionsWall.modeChangesAt(index)) continue
             val before = ReflectionsWall.visible(index - 1, 340)
             val after = ReflectionsWall.visible(index, 340)
+            assertEquals("step $index changed the cell count", before.size, after.size)
             val changed = before.indices.count { before[it] != after[it] }
             assertEquals("step $index changed $changed cells", 1, changed)
             assertEquals(ReflectionsWall.newestCell(index, 340), before.indices.first { before[it] != after[it] })
@@ -37,10 +74,13 @@ class ReflectionsWallTest {
     }
 
     @Test
-    fun `a short album shows one cell per photo`() {
+    fun `a short album never asks for more cells than it has photos`() {
+        val collageStep = (0 until 10).first { ReflectionsWall.modeFor(it) == ReflectionsWall.Mode.Collage }
+        val singleStep = (0 until 10).first { ReflectionsWall.modeFor(it) == ReflectionsWall.Mode.Single }
         assertEquals(1, ReflectionsWall.visible(0, 1).size)
-        assertEquals(2, ReflectionsWall.visible(3, 2).size)
-        assertEquals(3, ReflectionsWall.visible(3, 3).size)
+        assertEquals(2, ReflectionsWall.visible(collageStep, 2).size)
+        assertEquals(1, ReflectionsWall.visible(singleStep, 2).size)
+        assertEquals(3, ReflectionsWall.visible(collageStep, 3).size)
         assertTrue(ReflectionsWall.visible(0, 0).isEmpty())
     }
 
@@ -73,7 +113,10 @@ class ReflectionsWallTest {
     }
 
     @Test
-    fun `the wall stays inside its box`() {
+    fun `the wall fills the box horizontally and never spills sideways`() {
+        // A wall that is too narrow is scaled up to fill the width, which pushes
+        // the top of the tallest column out of the box; the stage crops that. It
+        // must never spill sideways, though - that would cut photos in half.
         val mixes = listOf(
             listOf(0.45f, 0.45f, 2.6f),
             listOf(2.6f, 2.6f, 2.6f),
@@ -81,12 +124,23 @@ class ReflectionsWallTest {
             listOf(1.333f, 1.4f, 1.35f),
         )
         for (aspects in mixes) {
-            ReflectionsWall.layout(aspects, box, gap).forEach {
+            val rects = ReflectionsWall.layout(aspects, box, gap)
+            rects.forEach {
                 assertTrue("$aspects pokes out left: ${it.left}", it.left >= box.left - 1f)
                 assertTrue("$aspects pokes out right: ${it.right}", it.right <= box.right + 1f)
-                assertTrue("$aspects pokes out top: ${it.top}", it.top >= box.top - 1f)
-                assertTrue("$aspects pokes out bottom: ${it.bottom}", it.bottom <= box.bottom + 1f)
+                assertTrue("$aspects floats above the baseline: ${it.bottom}", it.bottom <= box.bottom + 1f)
             }
+        }
+        // Real albums - 4:3 and 3:4 photos - fill the frame. A wall of nothing but
+        // extreme portraits cannot, without bending the photos.
+        for (aspects in listOf(
+            listOf(1.333f, 1.4f, 1.35f),
+            listOf(0.75f, 1.333f, 1.5f),
+            listOf(0.8f, 0.75f, 1.78f),
+        )) {
+            val rects = ReflectionsWall.layout(aspects, box, gap)
+            val used = (rects.maxOf { it.right } - rects.minOf { it.left }) / box.width
+            assertTrue("$aspects only fills ${(used * 100).toInt()}%", used > 0.9f)
         }
     }
 

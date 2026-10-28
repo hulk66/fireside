@@ -14,6 +14,29 @@ object ReflectionsWall {
     /** Cells on the wall; three gives one tall column and two stacked ones. */
     const val CELLS = 3
 
+    /** What a step shows. */
+    enum class Mode {
+        /** One photo, as large as the frame allows. */
+        Single,
+
+        /** Three photos: a tall column and two stacked beside it. */
+        Collage,
+    }
+
+    /**
+     * Steps of the ten-step cycle that show a single photo, so a show is roughly
+     * 70 % collage and 30 % single — spread out rather than clumped, so the big
+     * photo arrives "here and there" instead of in runs.
+     */
+    private val SINGLE_STEPS = setOf(3, 7, 9)
+
+    fun modeFor(index: Int): Mode =
+        if (Math.floorMod(index, 10) in SINGLE_STEPS) Mode.Single else Mode.Collage
+
+    /** How many photos this step shows. */
+    fun cellsFor(index: Int, count: Int): Int =
+        if (modeFor(index) == Mode.Single) minOf(count, 1) else minOf(count, CELLS)
+
     private const val MIN_ASPECT = 0.45f
     private const val MAX_ASPECT = 2.6f
     private const val FALLBACK_ASPECT = 1.5f
@@ -21,20 +44,23 @@ object ReflectionsWall {
     /** Photo shown in [cell] while photo [index] is current. */
     fun photoIndex(index: Int, cell: Int, count: Int): Int {
         if (count <= 0) return 0
-        val cells = minOf(count, CELLS)
+        val cells = cellsFor(index, count).coerceAtLeast(1)
         val stepsBack = Math.floorMod(index - cell, cells)
         return Math.floorMod(index - stepsBack, count)
     }
 
     /** The cell that received the newest photo. */
     fun newestCell(index: Int, count: Int): Int =
-        if (count <= 0) 0 else Math.floorMod(index, minOf(count, CELLS))
+        if (count <= 0) 0 else Math.floorMod(index, cellsFor(index, count).coerceAtLeast(1))
 
     /** Photos on the wall, indexed by cell. */
     fun visible(index: Int, count: Int): List<Int> {
         if (count <= 0) return emptyList()
-        return (0 until minOf(count, CELLS)).map { photoIndex(index, it, count) }
+        return (0 until cellsFor(index, count)).map { photoIndex(index, it, count) }
     }
+
+    /** True when the step changes between one photo and a collage. */
+    fun modeChangesAt(index: Int): Boolean = modeFor(index) != modeFor(index - 1)
 
     /**
      * Lays the cells out in [box], bottom aligned.
@@ -92,8 +118,48 @@ object ReflectionsWall {
     }
 
     private fun threeCells(aspects: List<Float>, box: GridRect, gap: Float): List<GridRect> {
-        // The most portrait photo takes the single column; the other two stack.
-        val tallCell = aspects.indices.minByOrNull { aspects[it] } ?: 0
+        // Try each photo as the tall column and keep the arrangement that covers
+        // the most of the box: a landscape photo in the tall slot fills far more
+        // of a 16:9 screen than a portrait one does, and empty margins are what
+        // "unused space" looks like.
+        var best: List<GridRect> = emptyList()
+        var bestWidth = -1f
+        for (tallCell in aspects.indices) {
+            val candidate = columns(aspects, tallCell, box, gap)
+            if (candidate.isEmpty()) continue
+            val width = candidate.maxOf { it.right } - candidate.minOf { it.left }
+            if (width > bestWidth) {
+                bestWidth = width
+                best = candidate
+            }
+        }
+        if (best.isEmpty()) return emptyList()
+
+        // Whatever width is still missing is made up by scaling the wall up
+        // evenly, so the photos get bigger and the top of the tallest column is
+        // cropped by the stage instead of leaving margins at the sides.
+        val wallWidth = bestWidth.coerceAtLeast(1f)
+        // Scale the wall up to fill the width, never down. The cap keeps a wall
+        // of very tall photos from being cropped away at the top for the sake of
+        // margins — an album of nothing but 2:3 portraits simply cannot fill a
+        // 16:9 frame with three whole photos, and stretching them to do it is not
+        // an option (that is what bends pictures out of shape).
+        val scale = (box.width / wallWidth).coerceIn(1f, MAX_FILL_SCALE)
+        if (scale <= 1.001f) return best
+
+        val centreX = (box.left + box.right) / 2f
+        return best.map { rect ->
+            GridRect(
+                centreX + (rect.left - centreX) * scale,
+                box.bottom - (box.bottom - rect.top) * scale,
+                centreX + (rect.right - centreX) * scale,
+                box.bottom - (box.bottom - rect.bottom) * scale,
+            )
+        }
+    }
+
+    /** One arrangement: [tallCell] fills the height, the other two stack beside it. */
+    private fun columns(aspects: List<Float>, tallCell: Int, box: GridRect, gap: Float): List<GridRect> {
         val stacked = aspects.indices.filter { it != tallCell }
 
         // Width the stacked column needs so its two photos add up to the height.
@@ -129,4 +195,7 @@ object ReflectionsWall {
         }
         return out.filterNotNull()
     }
+
+    /** Cap on the fill scale: beyond this the top of the wall would be cut away. */
+    private const val MAX_FILL_SCALE = 1.35f
 }

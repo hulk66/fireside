@@ -155,9 +155,11 @@ class SlideshowController(
             return
         }
         if (prefs.effect == SlideshowEffect.REFLECTIONS) {
-            // The wall shows three photos at once and each cell changes on its
-            // own step, so all three plus the one about to replace them are needed.
+            // The wall shows up to three photos and a cell changes on its own
+            // step, so all of them plus the incoming photo are needed — and the
+            // step before, which is still on screen while a step cross-fades.
             for (k in 0 until ReflectionsWall.CELLS) request(index - k, tile = false)
+            request(index - 1 - ReflectionsWall.CELLS, tile = false)
             request(index + 1, tile = false)
             return
         }
