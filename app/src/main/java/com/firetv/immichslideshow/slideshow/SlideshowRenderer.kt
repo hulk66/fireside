@@ -370,15 +370,13 @@ object SlideshowRenderer {
         )
 
         val floatY = sin(frame.elapsedMs / 2400f) * 4f
-        val cur = frame.bitmaps.full(frame.currentIndex)
-        val next = frame.bitmaps.full(frame.nextIndex)
         val p = Easing.easeInOutCubic(frame.transition)
 
-        // A big frame — the photo is the subject, not a prop. It stops short of
-        // the caption band, which the chrome slides over at the bottom.
-        val box = Rect(w * 0.06f, h * 0.05f + floatY, w * 0.94f, h * 0.70f + floatY)
+        // The wall: a few photos side by side, sharing one baseline so a single
+        // reflection strip can run under all of them.
+        val box = GridRect(w * 0.06f, h * 0.05f + floatY, w * 0.94f, h * 0.70f + floatY)
 
-        // Warm glow behind the photo
+        // Warm glow behind the wall
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x33FFB27A), Color(0x00000000)),
@@ -389,29 +387,56 @@ object SlideshowRenderer {
             center = Offset(w * 0.5f, h * 0.36f),
         )
 
-        val curRect = cur?.let { fitRect(it, box) }
-        val nextRect = next?.let { fitRect(it, box.translate(Offset(0f, (1f - p) * 26f))) }
+        val cells = ReflectionsWall.visible(frame.currentIndex, frame.count)
+        if (cells.isEmpty()) {
+            drawPlaceholder(Rect(box.left, box.top, box.right, box.bottom))
+            return
+        }
+        val aspects = cells.map { frame.photos.getOrNull(it)?.aspectRatio ?: 1.5f }
+        val cells2 = ReflectionsWall.layout(aspects, box, gap = 6.dp.toPx())
+        if (cells2.isEmpty()) return
+        val newest = ReflectionsWall.newestCell(frame.currentIndex, frame.count)
+        val mix = (frame.progress / 0.22f).coerceIn(0f, 1f)
 
-        if (curRect != null) drawFloatingPhoto(cur!!, curRect, fit = fit)
-        else drawPlaceholder(box)
-        if (p > 0f && nextRect != null) drawFloatingPhoto(next!!, nextRect, alpha = p, fit = fit)
-
-        // The glass below only carries a short, soft smear of the photo: the
-        // reflection is a hint of depth, not a second picture.
-        val anchorRect = curRect ?: nextRect ?: return
-        val gap = h * 0.008f
-        val reflTop = anchorRect.bottom + gap
-        val reflHeight = min(anchorRect.height * 0.17f, h - reflTop)
-        if (reflHeight <= 1f) return
-        val reflRect = Rect(anchorRect.left, reflTop, anchorRect.right, reflTop + reflHeight)
-
-        clipRect(reflRect.left, reflRect.top, reflRect.right, reflRect.bottom) {
-            withTransform({ scale(1f, -0.45f, Offset(anchorRect.center.x, reflTop)) }) {
-                if (curRect != null && cur != null) {
-                    drawCropped(cur, curRect, 1f, 0.5f, 0.5f, alpha = 0.34f, fit = fit, backdrop = Color.Transparent)
+        for (cell in cells.indices) {
+            val place = cells2.getOrNull(cell) ?: continue
+            val rect = Rect(place.left, place.top, place.right, place.bottom)
+            val current = frame.bitmaps.full(cells[cell])
+            if (cell == newest && mix < 1f) {
+                // The new photo cross-fades in over the one this cell held.
+                val previous = ReflectionsWall.photoIndex(frame.currentIndex - 1, cell, frame.count)
+                frame.bitmaps.full(previous)?.let {
+                    drawFloatingPhoto(it, rect, alpha = 1f - mix, fit = fit)
                 }
-                if (p > 0f && nextRect != null && next != null) {
-                    drawCropped(next, nextRect, 1f, 0.5f, 0.5f, alpha = 0.34f * p, fit = fit, backdrop = Color.Transparent)
+                if (current != null) drawFloatingPhoto(current, rect, alpha = mix, fit = fit)
+            } else if (current != null) {
+                drawFloatingPhoto(current, rect, fit = fit)
+            } else {
+                drawPlaceholder(rect)
+            }
+        }
+
+        // One short, soft smear under the whole wall: the reflection is a hint of
+        // depth, not a second picture.
+        val baseline = box.bottom
+        val gap = h * 0.008f
+        val stripTop = baseline + gap
+        val stripHeight = min(box.height * 0.17f, h - stripTop)
+        if (stripHeight <= 1f) return
+        val strip = Rect(box.left, stripTop, box.right, stripTop + stripHeight)
+
+        clipRect(strip.left, strip.top, strip.right, strip.bottom) {
+            withTransform({ scale(1f, -0.45f, Offset((box.left + box.right) / 2f, stripTop)) }) {
+                for (cell in cells.indices) {
+                    val place = cells2.getOrNull(cell) ?: continue
+                    val bitmap = frame.bitmaps.full(cells[cell]) ?: continue
+                    drawCropped(
+                        img = bitmap,
+                        dst = Rect(place.left, place.top, place.right, place.bottom),
+                        alpha = 0.34f,
+                        fit = fit,
+                        backdrop = Color.Transparent,
+                    )
                 }
             }
             // Fade out quickly, so the smear never turns into a hard edge.
@@ -422,18 +447,18 @@ object SlideshowRenderer {
                         Color(0xFF06070B).copy(alpha = 0.80f),
                         Color(0xFF020305),
                     ),
-                    startY = reflRect.top,
-                    endY = reflRect.bottom,
+                    startY = strip.top,
+                    endY = strip.bottom,
                 ),
-                topLeft = reflRect.topLeft,
-                size = reflRect.size,
+                topLeft = strip.topLeft,
+                size = strip.size,
             )
         }
-        // A soft sheen where the photo meets the glass.
+        // A soft sheen where the wall meets the glass.
         drawLine(
             color = Color(0xFFFFD9A8).copy(alpha = 0.14f),
-            start = Offset(anchorRect.left, reflTop),
-            end = Offset(anchorRect.right, reflTop),
+            start = Offset(box.left, stripTop),
+            end = Offset(box.right, stripTop),
             strokeWidth = 1.5f,
         )
     }

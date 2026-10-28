@@ -17,8 +17,8 @@ full-screen show and the animated thumbnails in the theme picker.
   Reflections, Scrapbook, Origami, Photo Grid.
 - **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
   whole in their original aspect ratio on a dark backdrop.
-- **Reflections** — one big photo on dark glass, with a short soft smear of it
-  underneath rather than a second full-size copy.
+- **Reflections** — photos on dark glass, one big portrait column beside two
+  stacked landscapes, all sharing a baseline and a single soft reflection smear.
 - **Flickr-style Photo Grid** — photos keep their aspect ratio, rows are
   justified edge to edge, and the wall turns over one calm page at a time.
 - **Live theme picker** — every tile is an animated preview rendered by the real
@@ -157,6 +157,14 @@ handing one of them a different size makes them request and draw different photo
 and every cell comes up empty. A unit test pins that invariant. `GridPlan` owns the
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
+
+The Reflections wall is three photos at once (`ReflectionsWall`): the most
+portrait one takes a tall column, the other two stack beside it, and their width
+is solved so the stack is exactly as tall as the column. Every cell keeps its own
+aspect ratio, all cells share one baseline, and one short smear mirrors the whole
+wall underneath. Cells are a ring like the scrapbook desk, so exactly one photo
+changes per step and the rest of the wall stays still. An album of one or two
+photos falls back to a single big photo / two equal columns.
 
 The Scrapbook desk is a pile of up to twenty polaroids. Each card keeps the place
 it was given when it arrived — the spot is derived from the photo id, so a card

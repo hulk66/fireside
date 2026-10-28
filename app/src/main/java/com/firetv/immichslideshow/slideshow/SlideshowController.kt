@@ -154,6 +154,13 @@ class SlideshowController(
             for (k in 0 until ScrapbookDesk.CARDS) request(index - k, tile = true)
             return
         }
+        if (prefs.effect == SlideshowEffect.REFLECTIONS) {
+            // The wall shows three photos at once and each cell changes on its
+            // own step, so all three plus the one about to replace them are needed.
+            for (k in 0 until ReflectionsWall.CELLS) request(index - k, tile = false)
+            request(index + 1, tile = false)
+            return
+        }
         request(index - 1, tile = false)
         request(index, tile = false)
         request(index + 1, tile = false)
