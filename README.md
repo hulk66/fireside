@@ -50,6 +50,19 @@ and banner are included). To launch it from a shell:
 adb shell am start -n com.firetv.immichslideshow/.MainActivity
 ```
 
+### Running on a TV emulator
+
+```bash
+emulator -avd FireTV_TV_API36 -no-snapshot -no-boot-anim -gpu host -no-audio \
+         -dns-server 192.168.0.2
+```
+
+Pass `-dns-server` with your LAN resolver. Without it the AVD advertises an
+IPv6 resolver (`fec0::3`) that it cannot reach, and after a while *every* lookup
+fails — the app then reports "the TV couldn't look up that name", which looks
+like a server problem but is the emulator's resolver. A Fire TV on the real LAN
+does not have this issue.
+
 ### Provisioning without typing on a remote
 
 ```bash
