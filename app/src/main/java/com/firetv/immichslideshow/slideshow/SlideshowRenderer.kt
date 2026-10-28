@@ -418,9 +418,7 @@ object SlideshowRenderer {
             if (modeChanged && mix < 1f) {
                 // One photo becoming three (or back) re-flows the whole wall, so
                 // the two arrangements cross-fade as a whole.
-                // The wall on its way out casts no shadow: two sets of them
-                // stacked on a white stage is what made the cross-fade look dirty.
-                drawWall(frame, index - 1, fit, box, gap, alpha = 1f - mix, newestMix = 1f, shadow = 0f)
+                drawWall(frame, index - 1, fit, box, gap, alpha = 1f - mix, newestMix = 1f)
             }
             drawWall(
                 frame = frame,
@@ -430,9 +428,6 @@ object SlideshowRenderer {
                 gap = gap,
                 alpha = if (modeChanged) mix else 1f,
                 newestMix = if (modeChanged) 1f else mix,
-                // Soft on a white stage: enough to lift the photos off the paper,
-                // not enough to draw grey rectangles around them.
-                shadow = 0.30f,
             )
         }
 
@@ -447,44 +442,48 @@ object SlideshowRenderer {
         val aspects = cells.map { frame.photos.getOrNull(it)?.aspectRatio ?: 1.5f }
         val rects = ReflectionsWall.layout(aspects, box, gap)
 
-        clipRect(strip.left, strip.top, strip.right, strip.bottom) {
-            // A hint of glass: a hair lighter than the stage behind the smear.
-            drawRect(Color(0x0D000000), topLeft = strip.topLeft, size = strip.size)
-            withTransform({ scale(1f, -0.42f, Offset((strip.left + strip.right) / 2f, stripTop)) }) {
+        // No wash and no hairline under the wall. A uniform grey band with four
+        // hard edges is not glass, it is a grey rectangle sitting on the photo
+        // stage - and the stage is the same colour as the fade, so the smear can
+        // simply dissolve into it.
+        // Stop the clip a hair above the strip's own bottom: on the boundary row
+        // the fade's edge is only half covered, which let a few percent of the
+        // smear through as a one pixel line across the frame.
+        clipRect(strip.left, strip.top, strip.right, strip.bottom - 1.5f) {
+            // Foreshortened, not squashed: 0.7 reads as a reflection on a table
+            // top, while 0.42 read as the photo smeared out of shape.
+            withTransform({ scale(1f, -0.70f, Offset((strip.left + strip.right) / 2f, stripTop)) }) {
                 cells.forEachIndexed { cell, photoIndex ->
                     val place = rects.getOrNull(cell) ?: return@forEachIndexed
                     val bitmap = frame.bitmaps.full(photoIndex) ?: return@forEachIndexed
                     drawCropped(
                         img = bitmap,
                         dst = Rect(place.left, place.top, place.right, place.bottom),
-                        alpha = 0.55f,
+                        alpha = 0.50f,
                         fit = fit,
                         backdrop = Color.Transparent,
                     )
                 }
             }
-            // Fade to the stage, so the smear has no hard bottom edge.
+            // Fade to the stage and finish before the strip does. Reaching full
+            // opacity only at the very bottom row still leaves a couple of
+            // percent of a dark photo showing, and that reads as a faint line
+            // where the reflection stops.
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFFF7F5F1).copy(alpha = 0.10f),
-                        Color(0xFFF7F5F1).copy(alpha = 0.42f),
-                        Color(0xFFF7F5F1).copy(alpha = 0.88f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.05f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.30f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.72f),
+                        Color(0xFFF7F5F1),
                     ),
                     startY = strip.top,
-                    endY = strip.bottom,
+                    endY = strip.top + stripHeight * 0.78f,
                 ),
                 topLeft = strip.topLeft,
                 size = strip.size,
             )
         }
-        // A hairline where the wall meets the glass.
-        drawLine(
-            color = Color.Black.copy(alpha = 0.10f),
-            start = Offset(box.left, stripTop),
-            end = Offset(box.right, stripTop),
-            strokeWidth = 1f,
-        )
     }
 
     /** Paints one arrangement of the wall; [newestMix] cross-fades the cell that changed. */
@@ -496,7 +495,6 @@ object SlideshowRenderer {
         gap: Float,
         alpha: Float,
         newestMix: Float,
-        shadow: Float,
     ) {
         val cells = ReflectionsWall.visible(index, frame.count)
         if (cells.isEmpty() || alpha <= 0.01f) return
@@ -512,13 +510,16 @@ object SlideshowRenderer {
                 // The new photo cross-fades in over the one this cell held.
                 val previous = ReflectionsWall.photoIndex(index - 1, cell, frame.count)
                 frame.bitmaps.full(previous)?.let {
-                    drawFloatingPhoto(it, rect, alpha = (1f - newestMix) * alpha, fit = fit, shadow = shadow)
+                    drawFloatingPhoto(it, rect, alpha = (1f - newestMix) * alpha, fit = fit, shadow = 0f)
                 }
                 if (current != null) {
-                    drawFloatingPhoto(current, rect, alpha = newestMix * alpha, fit = fit, shadow = shadow)
+                    drawFloatingPhoto(current, rect, alpha = newestMix * alpha, fit = fit, shadow = 0f)
                 }
             } else if (current != null) {
-                drawFloatingPhoto(current, rect, alpha = alpha, fit = fit, shadow = shadow)
+                // No shadow on this theme. A drop shadow and a reflection are two
+                // answers to the same question - where the photo sits in space -
+                // and together they read as a grey halo around every edge.
+                drawFloatingPhoto(current, rect, alpha = alpha, fit = fit, shadow = 0f)
             } else if (alpha > 0.5f) {
                 drawPlaceholder(rect)
             }

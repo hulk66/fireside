@@ -173,7 +173,17 @@ switches between one and three photos cross-fades the two arrangements whole.
 The stage is white, because a reflection only reads as a reflection when there is
 something for it to sit on: a dark smear of a dark photo on a dark background
 disappears. The reflection is 18 % of the frame tall — big enough to reach down to
-the caption, which sits at the foot of the glass. The photo shadow is dialled down
+the caption, which sits at the foot of the glass. The photos cast no drop shadow
+here: a shadow and a reflection answer the same question — where the photo sits in
+space — and together they read as a grey halo around every edge. The reflection is
+foreshortened to 0.7,
+not squashed to 0.42, which read as the photo smeared out of shape. There is no
+wash and no hairline under the wall either: a uniform grey band with four hard
+edges is not glass, it is a grey rectangle sitting on the stage. The smear simply
+fades into the stage colour, all the way to opaque, so it has no bottom edge - and
+the clip stops a pixel inside that opaque part, because on the boundary row the
+fade's own edge is only half covered and lets a few percent of the smear through as
+a one-pixel rule across the whole frame. The photo shadow is dialled down
 to 30 % here (three black layers read as grey boxes around every photo on white),
 and a step that switches between one and three photos cross-fades without drawing
 the outgoing wall's shadow at all.
