@@ -131,8 +131,9 @@ class ReflectionsWallTest {
                 assertTrue("$aspects floats above the baseline: ${it.bottom}", it.bottom <= box.bottom + 1f)
             }
         }
-        // Real albums - 4:3 and 3:4 photos - fill the frame. A wall of nothing but
-        // extreme portraits cannot, without bending the photos.
+        // Real albums - 4:3 and 3:4 photos - fill most of the frame. They stop
+        // short of the edges on purpose: filling the last few percent would push
+        // the tallest column out of the top of the stage, which looks like a bug.
         for (aspects in listOf(
             listOf(1.333f, 1.4f, 1.35f),
             listOf(0.75f, 1.333f, 1.5f),
@@ -140,7 +141,31 @@ class ReflectionsWallTest {
         )) {
             val rects = ReflectionsWall.layout(aspects, box, gap)
             val used = (rects.maxOf { it.right } - rects.minOf { it.left }) / box.width
-            assertTrue("$aspects only fills ${(used * 100).toInt()}%", used > 0.9f)
+            assertTrue("$aspects only fills ${(used * 100).toInt()}%", used > 0.85f)
+        }
+    }
+
+    @Test
+    fun `the wall never grows past the top of the stage`() {
+        // The wall is bottom aligned, so a wall taller than the box would be cut
+        // off at the top - which is what "photos at the very top, no margin"
+        // looked like. Every arrangement must fit the box height.
+        val mixes = listOf(
+            listOf(0.75f, 1.333f, 1.5f),
+            listOf(1.333f, 1.4f, 1.35f),
+            listOf(1.5f, 1.6f, 1.7f),
+            listOf(0.8f, 0.75f, 1.78f),
+            listOf(2.6f, 2.4f, 2.2f),
+            listOf(0.66f, 0.7f, 0.8f),
+        )
+        for (aspects in mixes) {
+            val rects = ReflectionsWall.layout(aspects, box, gap)
+            rects.forEach {
+                assertTrue(
+                    "$aspects reaches ${(it.top).toInt()} above the box top ${box.top.toInt()}",
+                    it.top >= box.top - 1f,
+                )
+            }
         }
     }
 

@@ -133,8 +133,8 @@ object SlideshowRenderer {
             textLayoutResult = layout,
             topLeft = Offset(
                 size.width * 0.062f,
-                // Above the playback chrome, which slides over the bottom fifth.
-                size.height * 0.885f - layout.size.height,
+                // At the foot of the reflection, clear of the chrome's hint row.
+                size.height * (if (dark) 0.935f else 0.885f) - layout.size.height,
             ),
         )
     }
@@ -401,7 +401,7 @@ object SlideshowRenderer {
         val gap = 6.dp.toPx()
         // As much of the frame as the photos can have: the caption below needs
         // one line, not a band.
-        val box = GridRect(w * 0.03f, h * 0.03f, w * 0.97f, h * 0.745f)
+        val box = GridRect(w * 0.03f, h * 0.035f, w * 0.97f, h * 0.735f)
         val baseline = box.bottom
 
         val index = frame.currentIndex
@@ -418,7 +418,9 @@ object SlideshowRenderer {
             if (modeChanged && mix < 1f) {
                 // One photo becoming three (or back) re-flows the whole wall, so
                 // the two arrangements cross-fade as a whole.
-                drawWall(frame, index - 1, fit, box, gap, alpha = 1f - mix, newestMix = 1f)
+                // The wall on its way out casts no shadow: two sets of them
+                // stacked on a white stage is what made the cross-fade look dirty.
+                drawWall(frame, index - 1, fit, box, gap, alpha = 1f - mix, newestMix = 1f, shadow = 0f)
             }
             drawWall(
                 frame = frame,
@@ -428,12 +430,17 @@ object SlideshowRenderer {
                 gap = gap,
                 alpha = if (modeChanged) mix else 1f,
                 newestMix = if (modeChanged) 1f else mix,
+                // Soft on a white stage: enough to lift the photos off the paper,
+                // not enough to draw grey rectangles around them.
+                shadow = 0.30f,
             )
         }
 
         // One short smear under the whole wall, mirrored and faded to the stage.
+        // A real reflection, not a hint: tall enough to reach down to the
+        // caption line, so the caption sits at the foot of the glass.
         val stripTop = baseline + h * 0.006f
-        val stripHeight = min(h * 0.095f, h - stripTop)
+        val stripHeight = min(h * 0.18f, h - stripTop)
         if (stripHeight <= 1f) return
         val strip = Rect(box.left, stripTop, box.right, stripTop + stripHeight)
         val cells = ReflectionsWall.visible(index, frame.count)
@@ -442,7 +449,7 @@ object SlideshowRenderer {
 
         clipRect(strip.left, strip.top, strip.right, strip.bottom) {
             // A hint of glass: a hair lighter than the stage behind the smear.
-            drawRect(Color(0x08000000), topLeft = strip.topLeft, size = strip.size)
+            drawRect(Color(0x0D000000), topLeft = strip.topLeft, size = strip.size)
             withTransform({ scale(1f, -0.42f, Offset((strip.left + strip.right) / 2f, stripTop)) }) {
                 cells.forEachIndexed { cell, photoIndex ->
                     val place = rects.getOrNull(cell) ?: return@forEachIndexed
@@ -450,7 +457,7 @@ object SlideshowRenderer {
                     drawCropped(
                         img = bitmap,
                         dst = Rect(place.left, place.top, place.right, place.bottom),
-                        alpha = 0.30f,
+                        alpha = 0.55f,
                         fit = fit,
                         backdrop = Color.Transparent,
                     )
@@ -460,9 +467,9 @@ object SlideshowRenderer {
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFFF7F5F1).copy(alpha = 0.25f),
-                        Color(0xFFF7F5F1).copy(alpha = 0.72f),
-                        Color(0xFFF7F5F1),
+                        Color(0xFFF7F5F1).copy(alpha = 0.10f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.42f),
+                        Color(0xFFF7F5F1).copy(alpha = 0.88f),
                     ),
                     startY = strip.top,
                     endY = strip.bottom,
@@ -489,6 +496,7 @@ object SlideshowRenderer {
         gap: Float,
         alpha: Float,
         newestMix: Float,
+        shadow: Float,
     ) {
         val cells = ReflectionsWall.visible(index, frame.count)
         if (cells.isEmpty() || alpha <= 0.01f) return
@@ -504,13 +512,13 @@ object SlideshowRenderer {
                 // The new photo cross-fades in over the one this cell held.
                 val previous = ReflectionsWall.photoIndex(index - 1, cell, frame.count)
                 frame.bitmaps.full(previous)?.let {
-                    drawFloatingPhoto(it, rect, alpha = (1f - newestMix) * alpha, fit = fit)
+                    drawFloatingPhoto(it, rect, alpha = (1f - newestMix) * alpha, fit = fit, shadow = shadow)
                 }
                 if (current != null) {
-                    drawFloatingPhoto(current, rect, alpha = newestMix * alpha, fit = fit)
+                    drawFloatingPhoto(current, rect, alpha = newestMix * alpha, fit = fit, shadow = shadow)
                 }
             } else if (current != null) {
-                drawFloatingPhoto(current, rect, alpha = alpha, fit = fit)
+                drawFloatingPhoto(current, rect, alpha = alpha, fit = fit, shadow = shadow)
             } else if (alpha > 0.5f) {
                 drawPlaceholder(rect)
             }
@@ -798,19 +806,24 @@ object SlideshowRenderer {
         dst: Rect,
         alpha: Float = 1f,
         fit: Boolean = false,
+        shadow: Float = 1f,
     ) {
         val radius = CornerRadius(10.dp.toPx())
         val path = Path().apply { addRoundRect(RoundRect(dst, radius)) }
 
-        // Layered shadow to fake a soft drop shadow
-        for (i in 3 downTo 1) {
-            val grow = i * 5f
-            drawRoundRect(
-                color = Color.Black.copy(alpha = 0.10f * alpha),
-                topLeft = Offset(dst.left - grow, dst.top + grow * 1.6f),
-                size = Size(dst.width + grow * 2f, dst.height + grow * 2f),
-                cornerRadius = CornerRadius(radius.x + grow),
-            )
+        // Layered shadow to fake a soft drop shadow. It is dialled down on the
+        // light stages, where three black layers read as grey boxes around every
+        // photo instead of as depth.
+        if (shadow > 0.01f) {
+            for (i in 3 downTo 1) {
+                val grow = i * 5f
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.10f * alpha * shadow),
+                    topLeft = Offset(dst.left - grow, dst.top + grow * 1.6f),
+                    size = Size(dst.width + grow * 2f, dst.height + grow * 2f),
+                    cornerRadius = CornerRadius(radius.x + grow),
+                )
+            }
         }
         clipPath(path) { drawCropped(img, dst, 1f, 0.5f, 0.5f, alpha, fit = fit) }
         drawRoundRect(

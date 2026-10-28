@@ -290,6 +290,11 @@ private fun SlideshowChrome(
     paused: Boolean,
     fitMode: FitMode,
 ) {
+    // The scrapbook desk and the reflections stage are white; a black scrim and
+    // white type disappear on them, so the chrome flips to ink on paper.
+    val light = info.effect == SlideshowEffect.REFLECTIONS || info.effect == SlideshowEffect.SCRAPBOOK
+    val titleColor = if (light) Color(0xFF1B1B1B) else Palette.Cream
+    val subColor = if (light) Color(0xCC7A4A1E) else Palette.AmberSoft.copy(alpha = 0.85f)
     val progress by animateFloatAsState(
         targetValue = info.progress.coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 420),
@@ -302,16 +307,22 @@ private fun SlideshowChrome(
                 .fillMaxWidth()
                 .height(190.dp)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xD9000000), Color(0x73000000), Color.Transparent),
-                    ),
+                    if (light) {
+                        Brush.verticalGradient(
+                            listOf(Color(0xE6FFFFFF), Color(0xB3FFFFFF), Color.Transparent),
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(Color(0xD9000000), Color(0x73000000), Color.Transparent),
+                        )
+                    },
                 ),
         )
         Row(Modifier.fillMaxWidth().padding(horizontal = 52.dp, vertical = 32.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = album.name,
-                    color = Palette.Cream,
+                    color = titleColor,
                     fontSize = 26.sp,
                     fontWeight = FontWeight.Light,
                     maxLines = 1,
@@ -326,7 +337,7 @@ private fun SlideshowChrome(
                         if (fitMode.isFit) append("  ·  Fit")
                         if (paused) append("  ·  Paused")
                     },
-                    color = Palette.AmberSoft.copy(alpha = 0.85f),
+                    color = subColor,
                     fontSize = 14.sp,
                     letterSpacing = 0.6.sp,
                     maxLines = 1,
@@ -335,14 +346,14 @@ private fun SlideshowChrome(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${(info.index + 1).coerceAtMost(info.count)} / ${info.count}",
-                    color = Palette.Cream,
+                    color = titleColor,
                     fontSize = 17.sp,
                     letterSpacing = 1.6.sp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "▼ themes",
-                    color = Palette.MutedDim,
+                    color = if (light) Color(0x992A2A2A) else Palette.MutedDim,
                     fontSize = 12.sp,
                     letterSpacing = 1.sp,
                 )
@@ -355,9 +366,15 @@ private fun SlideshowChrome(
                 .fillMaxWidth()
                 .heightIn(min = 132.dp)
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, Color(0x8C000000), Color(0xD9000000)),
-                    ),
+                    if (light) {
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xB3FFFFFF), Color(0xE6FFFFFF)),
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0x8C000000), Color(0xD9000000)),
+                        )
+                    },
                 )
                 .padding(horizontal = 52.dp, vertical = 30.dp),
             verticalArrangement = Arrangement.Bottom,
@@ -371,7 +388,7 @@ private fun SlideshowChrome(
                     Modifier
                         .widthIn(max = 420.dp)
                         .height(3.dp)
-                        .background(Color(0x33FFFFFF)),
+                        .background(if (light) Color(0x2E000000) else Color(0x33FFFFFF)),
                 ) {
                     Box(
                         Modifier
@@ -381,10 +398,10 @@ private fun SlideshowChrome(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                KeyHint(keys = "◀ ▶", label = "Photo")
-                KeyHint(keys = "OK", label = if (paused) "Resume" else "Pause")
-                KeyHint(keys = "▼", label = "Themes")
-                KeyHint(keys = "BACK", label = "Albums")
+                KeyHint(keys = "◀ ▶", label = "Photo", light = light)
+                KeyHint(keys = "OK", label = if (paused) "Resume" else "Pause", light = light)
+                KeyHint(keys = "▼", label = "Themes", light = light)
+                KeyHint(keys = "BACK", label = "Albums", light = light)
             }
         }
     }

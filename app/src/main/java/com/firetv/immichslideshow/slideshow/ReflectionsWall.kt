@@ -139,12 +139,15 @@ object ReflectionsWall {
         // evenly, so the photos get bigger and the top of the tallest column is
         // cropped by the stage instead of leaving margins at the sides.
         val wallWidth = bestWidth.coerceAtLeast(1f)
-        // Scale the wall up to fill the width, never down. The cap keeps a wall
-        // of very tall photos from being cropped away at the top for the sake of
-        // margins — an album of nothing but 2:3 portraits simply cannot fill a
-        // 16:9 frame with three whole photos, and stretching them to do it is not
-        // an option (that is what bends pictures out of shape).
-        val scale = (box.width / wallWidth).coerceIn(1f, MAX_FILL_SCALE)
+        // Close a small leftover width, but never grow past the box: scaling to
+        // meet the frame edges pushes the tallest column out of the top of the
+        // stage, and a wall with no margin above it looks like a bug. A wall of
+        // nothing but 2:3 portraits simply cannot fill a 16:9 frame with three
+        // whole photos, and stretching them to try is not an option.
+        val wallHeight = (best.maxOf { it.bottom } - best.minOf { it.top }).coerceAtLeast(1f)
+        val byWidth = (box.width / wallWidth).coerceAtMost(MAX_FILL_SCALE)
+        val byHeight = box.height / wallHeight
+        val scale = minOf(byWidth, byHeight).coerceAtLeast(1f)
         if (scale <= 1.001f) return best
 
         val centreX = (box.left + box.right) / 2f

@@ -172,8 +172,16 @@ switches between one and three photos cross-fades the two arrangements whole.
 
 The stage is white, because a reflection only reads as a reflection when there is
 something for it to sit on: a dark smear of a dark photo on a dark background
-disappears. That also means no vignette and no black caption scrim on this theme —
-the caption is smaller, dark, and sits above the chrome.
+disappears. The reflection is 18 % of the frame tall — big enough to reach down to
+the caption, which sits at the foot of the glass. The photo shadow is dialled down
+to 30 % here (three black layers read as grey boxes around every photo on white),
+and a step that switches between one and three photos cross-fades without drawing
+the outgoing wall's shadow at all.
+
+A light stage also flips the playback chrome: the title, the counter and the key
+hints go dark and the scrims go white, because white type on a white stage is
+invisible. Scrapbook, whose desk is paper, gets the same treatment. The vignette is
+off on both — a dark vignette on white reads as grime rather than as depth.
 
 The Scrapbook desk is a pile of up to twenty polaroids. Each card keeps the place
 it was given when it arrived — the spot is derived from the photo id, so a card

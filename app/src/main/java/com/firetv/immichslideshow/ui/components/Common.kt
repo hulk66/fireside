@@ -225,7 +225,13 @@ fun TvChip(
 
 /** A labelled key cap, used in the on-screen control hints. */
 @Composable
-fun KeyHint(keys: String, label: String, modifier: Modifier = Modifier) {
+fun KeyHint(
+    keys: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    /** On a light stage the pill and the type both have to go dark to read. */
+    light: Boolean = false,
+) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -234,20 +240,29 @@ fun KeyHint(keys: String, label: String, modifier: Modifier = Modifier) {
         Box(
             Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0x1FFFFFFF))
-                .border(1.dp, Palette.Hairline, RoundedCornerShape(8.dp))
+                .background(if (light) Color(0x1A000000) else Color(0x1FFFFFFF))
+                .border(
+                    1.dp,
+                    if (light) Color(0x33000000) else Palette.Hairline,
+                    RoundedCornerShape(8.dp),
+                )
                 .padding(horizontal = 10.dp, vertical = 5.dp),
         ) {
             Text(
                 text = keys,
-                color = Palette.Cream,
+                color = if (light) Color(0xFF2A2A2A) else Palette.Cream,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.6.sp,
                 maxLines = 1,
             )
         }
-        Text(text = label, color = Palette.Muted, fontSize = 14.sp, maxLines = 1)
+        Text(
+            text = label,
+            color = if (light) Color(0xB32A2A2A) else Palette.Muted,
+            fontSize = 14.sp,
+            maxLines = 1,
+        )
     }
 }
 
