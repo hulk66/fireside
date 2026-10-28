@@ -1,0 +1,880 @@
+package com.firetv.immichslideshow.slideshow
+
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
+/**
+ * Paints one slideshow frame with plain [DrawScope] calls.
+ *
+ * Everything is derived from [SlideshowFrame] only, which keeps the renderer
+ * stateless and lets the theme picker reuse it for animated thumbnails.
+ */
+object SlideshowRenderer {
+
+    fun DrawScope.renderSlideshow(frame: SlideshowFrame, textMeasurer: TextMeasurer? = null) {
+        drawRect(Color.Black)
+        if (!frame.hasPhotos) {
+            drawEmptyState()
+            return
+        }
+        when (frame.effect) {
+            SlideshowEffect.CLASSIC -> drawClassic(frame)
+            SlideshowEffect.KEN_BURNS -> drawKenBurns(frame)
+            SlideshowEffect.SLIDE -> drawSlide(frame)
+            SlideshowEffect.FLIP -> drawFlip(frame)
+            SlideshowEffect.FOLD -> drawFold(frame)
+            SlideshowEffect.SHIFTING_TILES -> drawShiftingTiles(frame)
+            SlideshowEffect.REFLECTIONS -> drawReflections(frame)
+            SlideshowEffect.SCRAPBOOK -> drawScrapbook(frame, textMeasurer)
+            SlideshowEffect.ORIGAMI -> drawOrigami(frame)
+            SlideshowEffect.PHOTO_GRID -> drawPhotoGrid(frame)
+        }
+        if (frame.prefs.vignette) drawVignette(0.5f)
+        if (frame.effect != SlideshowEffect.SCRAPBOOK && frame.effect != SlideshowEffect.PHOTO_GRID) {
+            drawCaption(frame, textMeasurer, captionAlpha(frame))
+        }
+    }
+
+    /** Captions fade in when a slide settles, then get out of the way. */
+    private fun captionAlpha(frame: SlideshowFrame): Float {
+        if (!frame.prefs.showCaption || frame.transition > 0f) return 0f
+        val hold = frame.hold
+        return when {
+            hold < 0.05f -> hold / 0.05f
+            hold < 0.42f -> 1f
+            hold < 0.55f -> 1f - (hold - 0.42f) / 0.13f
+            else -> 0f
+        }.coerceIn(0f, 1f)
+    }
+
+    private fun DrawScope.drawCaption(frame: SlideshowFrame, textMeasurer: TextMeasurer?, alpha: Float) {
+        if (alpha <= 0.01f || textMeasurer == null) return
+        val text = frame.currentPhoto?.caption?.takeIf { it.isNotBlank() } ?: return
+
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f * alpha)),
+                startY = size.height * 0.72f,
+                endY = size.height,
+            ),
+        )
+
+        // Sized from the canvas so the same renderer reads correctly on a TV
+        // and inside a small theme-preview tile.
+        val captionPx = (size.height * 0.052f).coerceAtLeast(10f)
+        val style = TextStyle(
+            color = Color.White.copy(alpha = 0.94f * alpha),
+            fontSize = captionPx.toSp(),
+            fontWeight = FontWeight.Light,
+            letterSpacing = (captionPx * 0.02f).toSp(),
+            shadow = Shadow(
+                color = Color.Black.copy(alpha = 0.65f * alpha),
+                offset = Offset(0f, captionPx * 0.07f),
+                blurRadius = captionPx * 0.34f,
+            ),
+        )
+        val layout = textMeasurer.measure(text = text, style = style, maxLines = 1)
+        drawText(
+            textLayoutResult = layout,
+            topLeft = Offset(
+                size.width * 0.062f,
+                size.height * 0.885f - layout.size.height,
+            ),
+        )
+    }
+
+    // ------------------------------------------------------------- themes
+
+    /** Slow cross-dissolve with a gentle push-in. */
+    private fun DrawScope.drawClassic(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val p = Easing.easeInOutCubic(frame.transition)
+        val cur = frame.bitmaps.full(frame.currentIndex)
+
+        if (cur != null) {
+            val vp = pushInViewport(frame.seed, frame.progress, frame.prefs.panIntensity)
+            drawCropped(cur, full, vp.zoom * (1f + 0.04f * p), vp.focusX, vp.focusY)
+        } else {
+            drawPlaceholder()
+        }
+
+        if (frame.transition > 0f) {
+            val next = frame.bitmaps.full(frame.nextIndex)
+            if (next != null) {
+                val nvp = pushInViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
+                drawCropped(next, full, nvp.zoom * (1.06f - 0.06f * p), nvp.focusX, nvp.focusY, alpha = p)
+            }
+        }
+    }
+
+    /** Roving pan and zoom that keeps moving for the whole slide. */
+    private fun DrawScope.drawKenBurns(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val p = Easing.easeInOutCubic(frame.transition)
+        val cur = frame.bitmaps.full(frame.currentIndex)
+
+        if (cur != null) {
+            val vp = kenBurnsViewport(frame.seed, frame.progress, frame.prefs.panIntensity)
+            drawCropped(cur, full, vp.zoom, vp.focusX, vp.focusY)
+        } else {
+            drawPlaceholder()
+        }
+
+        if (frame.transition > 0f) {
+            val next = frame.bitmaps.full(frame.nextIndex)
+            if (next != null) {
+                val vp = kenBurnsViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
+                drawCropped(next, full, vp.zoom * 1.04f, vp.focusX, vp.focusY, alpha = p)
+            }
+        }
+    }
+
+    /** Frames glide past each other, the incoming one casting a soft edge shadow. */
+    private fun DrawScope.drawSlide(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val w = size.width
+        val p = frame.transition
+        val e = Easing.easeInOutCubic(p)
+        val cur = frame.bitmaps.full(frame.currentIndex)
+
+        if (cur != null) {
+            withTransform({ translate(-w * 0.26f * e, 0f) }) {
+                drawCropped(cur, full, 1f + 0.03f * e, 0.5f, 0.5f)
+            }
+        } else {
+            drawPlaceholder()
+        }
+
+        if (p > 0f) {
+            drawRect(Color.Black.copy(alpha = 0.5f * e))
+
+            val next = frame.bitmaps.full(frame.nextIndex)
+            val x = w * (1f - e)
+            // Soft shadow travelling with the incoming frame
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent),
+                    startX = x - w * 0.10f,
+                    endX = x,
+                ),
+                topLeft = Offset(x - w * 0.10f, 0f),
+                size = Size(w * 0.10f, size.height),
+            )
+            if (next != null) {
+                withTransform({ translate(x, 0f) }) {
+                    drawCropped(next, full, 1.03f - 0.03f * e, 0.5f, 0.5f)
+                }
+            }
+        }
+    }
+
+    /** A card turning over on a shared vertical axis. */
+    private fun DrawScope.drawFlip(frame: SlideshowFrame) {
+        val p = frame.transition
+        val inset = Size(size.width * 0.055f, size.height * 0.075f)
+        val card = Rect(inset.width, inset.height, size.width - inset.width, size.height - inset.height)
+        val radius = CornerRadius(16.dp.toPx())
+        val cardPath = Path().apply { addRoundRect(RoundRect(card, radius)) }
+
+        // Stage glow behind the card
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0xFF1B2130), Color(0xFF07080C)),
+                center = card.center,
+                radius = max(size.width, size.height) * 0.7f,
+            ),
+        )
+
+        if (p <= 0.5f) {
+            val k = (p / 0.5f).coerceIn(0f, 1f)
+            val sx = cos(k * HALF_PI)
+            if (sx > 0.01f) {
+                withTransform({ scale(sx, 1f - 0.05f * k, card.center) }) {
+                    clipPath(cardPath) {
+                        val bmp = frame.bitmaps.full(frame.currentIndex)
+                        if (bmp != null) drawCropped(bmp, card, 1f, 0.5f, 0.5f) else drawPlaceholder(card)
+                        drawRect(Color.Black.copy(alpha = 0.5f * k), topLeft = card.topLeft, size = card.size)
+                    }
+                }
+            }
+        } else {
+            val k = ((p - 0.5f) / 0.5f).coerceIn(0f, 1f)
+            val sx = sin(k * HALF_PI)
+            if (sx > 0.01f) {
+                withTransform({ scale(sx, 1f - 0.05f * (1f - k), card.center) }) {
+                    clipPath(cardPath) {
+                        val bmp = frame.bitmaps.full(frame.nextIndex)
+                        if (bmp != null) drawCropped(bmp, card, 1f, 0.5f, 0.5f) else drawPlaceholder(card)
+                        drawRect(Color.Black.copy(alpha = 0.5f * (1f - k)), topLeft = card.topLeft, size = card.size)
+                    }
+                }
+            }
+        }
+
+        // Card edge highlight
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.10f),
+            topLeft = card.topLeft,
+            size = card.size,
+            cornerRadius = radius,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f),
+        )
+    }
+
+    /** Vertical panels fold away like an accordion. */
+    private fun DrawScope.drawFold(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val panels = 10
+        val panelW = size.width / panels
+        val cur = frame.bitmaps.full(frame.currentIndex)
+        val next = frame.bitmaps.full(frame.nextIndex)
+
+        // The incoming photo sits underneath
+        val under = next ?: cur
+        if (under != null) {
+            val vp = pushInViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
+            drawCropped(under, full, vp.zoom * 1.02f, vp.focusX, vp.focusY)
+        } else {
+            drawPlaceholder()
+        }
+        if (cur == null) return
+
+        for (i in 0 until panels) {
+            val local = stagger(frame.transition, i, panels, spread = 0.55f)
+            val e = Easing.easeInOutCubic(local)
+            val sx = 1f - e
+            if (sx <= 0.01f) continue
+
+            val left = i * panelW
+            val pivotX = if (i % 2 == 0) left else left + panelW
+            clipRect(left, 0f, left + panelW, size.height) {
+                withTransform({ scale(sx, 1f, Offset(pivotX, 0f)) }) {
+                    drawCropped(cur, full, 1f, 0.5f, 0.5f)
+                }
+            }
+            // Shading that makes the fold read as a physical crease
+            val visibleWidth = panelW * sx
+            val shadeLeft = if (i % 2 == 0) left else left + panelW - visibleWidth
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.Black.copy(alpha = 0.55f * e), Color.Black.copy(alpha = 0.15f * e)),
+                    startX = shadeLeft,
+                    endX = shadeLeft + visibleWidth,
+                ),
+                topLeft = Offset(shadeLeft, 0f),
+                size = Size(visibleWidth, size.height),
+            )
+            drawLine(
+                color = Color.White.copy(alpha = 0.10f * e),
+                start = Offset(shadeLeft, 0f),
+                end = Offset(shadeLeft, size.height),
+                strokeWidth = 1.5f,
+            )
+        }
+    }
+
+    /** A grid of tiles shuffles off toward the frame edges. */
+    private fun DrawScope.drawShiftingTiles(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val cols = 5
+        val rows = 3
+        val tileW = size.width / cols
+        val tileH = size.height / rows
+        val cur = frame.bitmaps.full(frame.currentIndex)
+        val next = frame.bitmaps.full(frame.nextIndex)
+        val under = next ?: cur
+
+        if (under != null) {
+            val vp = pushInViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
+            drawCropped(under, full, vp.zoom * 1.03f, vp.focusX, vp.focusY)
+        } else {
+            drawPlaceholder()
+        }
+        if (cur == null) return
+
+        val total = cols * rows
+        for (i in 0 until total) {
+            val local = stagger(frame.transition, i, total, spread = 0.6f)
+            val e = Easing.easeInCubic(local)
+            if (e >= 0.999f) continue
+
+            val col = i % cols
+            val row = i / cols
+            val tile = Rect(col * tileW, row * tileH, (col + 1) * tileW, (row + 1) * tileH)
+            val dir = tileExitDirection(frame.seed, i, cols)
+            val dx = dir.x * size.width * 0.5f * e
+            val dy = dir.y * size.height * 0.55f * e
+            val rotation = 16f * dir.x * e
+
+            withTransform({
+                translate(dx, dy)
+                rotate(rotation, tile.center)
+            }) {
+                clipRect(tile.left, tile.top, tile.right, tile.bottom) {
+                    drawCropped(cur, full, 1f, 0.5f, 0.5f, alpha = 1f - e)
+                }
+            }
+        }
+
+        // Hairline seams, so the wall of tiles still reads as tiles at rest.
+        val seam = Color.Black.copy(alpha = 0.22f)
+        for (c in 1 until cols) {
+            drawLine(seam, Offset(tileW * c, 0f), Offset(tileW * c, size.height), strokeWidth = 2f)
+        }
+        for (r in 1 until rows) {
+            drawLine(seam, Offset(0f, tileH * r), Offset(size.width, tileH * r), strokeWidth = 2f)
+        }
+    }
+
+    /** A floating photo with its mirrored echo on dark water. */
+    private fun DrawScope.drawReflections(frame: SlideshowFrame) {
+        val w = size.width
+        val h = size.height
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFF11151F), Color(0xFF06070B), Color(0xFF020305)),
+                startY = 0f,
+                endY = h,
+            ),
+        )
+
+        val floatY = sin(frame.elapsedMs / 2400f) * 5f
+        val cur = frame.bitmaps.full(frame.currentIndex)
+        val next = frame.bitmaps.full(frame.nextIndex)
+        val p = Easing.easeInOutCubic(frame.transition)
+
+        val box = Rect(
+            w * 0.16f,
+            h * 0.13f + floatY,
+            w * 0.84f,
+            h * 0.66f + floatY,
+        )
+
+        // Warm glow behind the photo
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0x33FFB27A), Color(0x00000000)),
+                center = Offset(w * 0.5f, h * 0.36f),
+                radius = max(w, h) * 0.55f,
+            ),
+            radius = max(w, h) * 0.55f,
+            center = Offset(w * 0.5f, h * 0.36f),
+        )
+
+        val curRect = cur?.let { fitRect(it, box) }
+        val nextRect = next?.let { fitRect(it, box.translate(Offset(0f, (1f - p) * 24f))) }
+
+        if (curRect != null) drawFloatingPhoto(cur!!, curRect)
+        else drawPlaceholder(box)
+        if (p > 0f && nextRect != null) drawFloatingPhoto(next!!, nextRect, alpha = p)
+
+        // Mirror below the floating photo
+        val anchorRect = curRect ?: nextRect ?: return
+        val gap = h * 0.018f
+        val reflTop = anchorRect.bottom + gap
+        val reflHeight = anchorRect.height * 0.55f
+        if (reflTop >= h) return
+        val reflRect = Rect(anchorRect.left, reflTop, anchorRect.right, min(h, reflTop + reflHeight))
+
+        clipRect(reflRect.left, reflRect.top, reflRect.right, reflRect.bottom) {
+            withTransform({ scale(1f, -0.55f, Offset(anchorRect.center.x, reflTop)) }) {
+                if (curRect != null && cur != null) {
+                    drawCropped(cur, curRect, 1f, 0.5f, 0.5f, alpha = 0.42f)
+                }
+                if (p > 0f && nextRect != null && next != null) {
+                    drawCropped(next, nextRect, 1f, 0.5f, 0.5f, alpha = 0.42f * p)
+                }
+            }
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color(0xFF06070B).copy(alpha = 0.95f)),
+                    startY = reflRect.top,
+                    endY = reflRect.bottom,
+                ),
+                topLeft = reflRect.topLeft,
+                size = reflRect.size,
+            )
+            // Ripples
+            val ripples = 7
+            for (i in 0 until ripples) {
+                val ry = reflRect.top + reflRect.height * (i + 1) / (ripples + 1)
+                val wobble = sin(frame.elapsedMs / 900f + i) * 10f
+                drawLine(
+                    color = Color.White.copy(alpha = 0.10f - i * 0.01f),
+                    start = Offset(reflRect.left + wobble, ry),
+                    end = Offset(reflRect.right + wobble, ry),
+                    strokeWidth = 1.2f,
+                )
+            }
+        }
+        // Horizon glow
+        drawLine(
+            color = Color(0xFFFFD9A8).copy(alpha = 0.18f),
+            start = Offset(anchorRect.left, reflTop),
+            end = Offset(anchorRect.right, reflTop),
+            strokeWidth = 2f,
+        )
+    }
+
+    /** Polaroids settling onto a paper desk. */
+    private fun DrawScope.drawScrapbook(frame: SlideshowFrame, textMeasurer: TextMeasurer?) {
+        val w = size.width
+        val h = size.height
+        drawRect(Color(0xFFE9E1D2))
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(Color(0x33FFFFFF), Color(0x00000000), Color(0x22000000)),
+                center = Offset(w * 0.35f, h * 0.25f),
+                radius = max(w, h) * 0.9f,
+            ),
+        )
+
+        // Paper speckles, fixed in space so they don't crawl between frames
+        repeat(110) { i ->
+            val x = Rng.unit(90_001L, i) * w
+            val y = Rng.unit(90_002L, i) * h
+            val r = 0.6f + Rng.unit(90_003L, i) * 1.4f
+            drawCircle(Color.Black.copy(alpha = 0.045f), radius = r, center = Offset(x, y))
+        }
+
+        val cardW = w * 0.40f
+        val cardH = h * 0.56f
+        // The new card drops in over the first slice of the cycle; keying this
+        // off the cycle (not the transition) keeps it settled through the hold.
+        val dropEase = Easing.backOut((frame.progress / 0.16f).coerceIn(0f, 1f), overshoot = 1.2f)
+
+        for (layer in 0..2) {
+            val offset = layer - 2
+            val photo = frame.photoAt(offset) ?: continue
+            val bmp = frame.bitmapAt(offset)
+            val seed = photo.id.hashCode().toLong()
+            val isCurrent = offset == 0
+
+            val rot = photoRotation(seed, layer, 4.5f) * if (isCurrent) 1f else 1.3f
+            val jitter = photoOffset(seed, layer, 0.045f)
+
+            var scale = if (isCurrent) 1f else 0.9f
+            var alpha = if (isCurrent) 1f else 0.92f
+            var cy = h * (0.5f + jitter.y)
+            val cx = w * (0.5f + jitter.x)
+
+            if (isCurrent) {
+                cy += (1f - dropEase) * h * 0.55f
+                scale = 0.9f + 0.1f * dropEase
+                alpha = (0.1f + 0.9f * dropEase).coerceIn(0f, 1f)
+            } else {
+                cy += frame.transition * 10f * layer
+                if (layer == 0) alpha *= 0.85f
+            }
+
+            val cardRect = Rect(
+                cx - cardW * scale / 2f,
+                cy - cardH * scale / 2f,
+                cx + cardW * scale / 2f,
+                cy + cardH * scale / 2f,
+            )
+            // Only the front card is captioned: the stacked ones would otherwise
+            // show their handwriting through the translucent incoming card.
+            drawPolaroid(bmp, cardRect, rot, if (isCurrent) photo.caption else null, textMeasurer, alpha)
+
+            if (isCurrent && dropEase > 0.7f) {
+                drawTape(cardRect, rot, alpha = ((dropEase - 0.7f) / 0.3f).coerceIn(0f, 1f))
+            }
+        }
+    }
+
+    /** Triangular facets turn and fold like cut paper. */
+    private fun DrawScope.drawOrigami(frame: SlideshowFrame) {
+        val full = Rect(Offset.Zero, size)
+        val cols = 4
+        val rows = 3
+        val cw = size.width / cols
+        val ch = size.height / rows
+        val cur = frame.bitmaps.full(frame.currentIndex)
+        val next = frame.bitmaps.full(frame.nextIndex)
+        val under = next ?: cur
+
+        if (under != null) {
+            val vp = pushInViewport(frame.nextSeed, 0f, frame.prefs.panIntensity)
+            drawCropped(under, full, vp.zoom * 1.03f, vp.focusX, vp.focusY)
+        } else {
+            drawPlaceholder()
+        }
+        if (cur == null) return
+
+        val total = cols * rows * 2
+        var facet = 0
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                val x0 = col * cw
+                val y0 = row * ch
+                val x1 = x0 + cw
+                val y1 = y0 + ch
+                val descending = (row + col) % 2 == 0
+
+                val triangles = if (descending) {
+                    listOf(
+                        triangleOf(x0, y0, x1, y0, x0, y1),
+                        triangleOf(x1, y0, x1, y1, x0, y1),
+                    )
+                } else {
+                    listOf(
+                        triangleOf(x0, y0, x1, y0, x1, y1),
+                        triangleOf(x0, y0, x1, y1, x0, y1),
+                    )
+                }
+
+                for (triangle in triangles) {
+                    val local = stagger(frame.transition, facet, total, spread = 0.7f)
+                    val e = Easing.easeInOutCubic(local)
+                    val direction = if (facet % 2 == 0) 1f else -1f
+                    facet++
+                    if (e >= 0.999f) continue
+
+                    val bounds = triangle.getBounds()
+                    val pivot = bounds.center
+                    val rotation = 48f * direction * e
+                    val shrink = 1f - 0.92f * e
+                    withTransform({
+                        rotate(rotation, pivot)
+                        scale(shrink, shrink, pivot)
+                    }) {
+                        clipPath(triangle) {
+                            drawCropped(cur, full, 1f, 0.5f, 0.5f, alpha = 1f - e * 0.95f)
+                            // Paper sheen sweeping across the facet
+                            drawRect(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.14f * e),
+                                        Color.Transparent,
+                                    ),
+                                    start = Offset(bounds.left, bounds.top),
+                                    end = Offset(bounds.right, bounds.bottom),
+                                ),
+                                topLeft = bounds.topLeft,
+                                size = bounds.size,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** A living mosaic of the whole album. */
+    private fun DrawScope.drawPhotoGrid(frame: SlideshowFrame) {
+        val w = size.width
+        val h = size.height
+        drawRect(Color(0xFF07080B))
+
+        val gap = 6.dp.toPx()
+        val cols = GridPlan.COLUMNS
+        val rows = GridPlan.ROWS
+        val tileW = (w - gap * (cols + 1)) / cols
+        val tileH = (h - gap * (rows + 1)) / rows
+        val drift = 1f + 0.035f * (0.5f + 0.5f * sin(frame.elapsedMs / 26_000f))
+
+        withTransform({ scale(drift, drift, center) }) {
+            for (tile in GridPlan.tiles(frame.elapsedMs, frame.count)) {
+                val col = tile.slot % cols
+                val row = tile.slot / cols
+                val left = gap + col * (tileW + gap)
+                val top = gap + row * (tileH + gap)
+                val rect = Rect(left, top, left + tileW, top + tileH)
+                val clip = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(4.dp.toPx()))) }
+
+                val from = frame.bitmaps.tile(tile.fromIndex)
+                val to = frame.bitmaps.tile(tile.toIndex)
+
+                clipPath(clip) {
+                    when {
+                        from != null && to != null -> {
+                            drawCropped(from, rect, 1f, 0.5f, 0.5f, alpha = 1f - tile.mix)
+                            drawCropped(to, rect, 1f, 0.5f, 0.5f, alpha = tile.mix)
+                        }
+                        from != null -> drawCropped(from, rect, 1f, 0.5f, 0.5f)
+                        to != null -> drawCropped(to, rect, 1f, 0.5f, 0.5f)
+                        else -> drawRect(Color(0xFF141821), rect.topLeft, rect.size)
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ painting helpers
+
+    private fun DrawScope.drawFloatingPhoto(img: ImageBitmap, dst: Rect, alpha: Float = 1f) {
+        val radius = CornerRadius(10.dp.toPx())
+        val path = Path().apply { addRoundRect(RoundRect(dst, radius)) }
+
+        // Layered shadow to fake a soft drop shadow
+        for (i in 3 downTo 1) {
+            val grow = i * 5f
+            drawRoundRect(
+                color = Color.Black.copy(alpha = 0.10f * alpha),
+                topLeft = Offset(dst.left - grow, dst.top + grow * 1.6f),
+                size = Size(dst.width + grow * 2f, dst.height + grow * 2f),
+                cornerRadius = CornerRadius(radius.x + grow),
+            )
+        }
+        clipPath(path) { drawCropped(img, dst, 1f, 0.5f, 0.5f, alpha) }
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.08f * alpha),
+            topLeft = dst.topLeft,
+            size = dst.size,
+            cornerRadius = radius,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f),
+        )
+    }
+
+    private fun DrawScope.drawPolaroid(
+        img: ImageBitmap?,
+        rect: Rect,
+        rotation: Float,
+        caption: String?,
+        textMeasurer: TextMeasurer?,
+        alpha: Float,
+    ) {
+        val corner = CornerRadius(4.dp.toPx())
+        withTransform({ rotate(rotation, rect.center) }) {
+            // Shadow
+            drawRoundRect(
+                color = Color.Black.copy(alpha = 0.28f * alpha),
+                topLeft = Offset(rect.left + 7f, rect.top + 12f),
+                size = rect.size,
+                cornerRadius = corner,
+            )
+            // Card
+            drawRoundRect(
+                color = Color(0xFFFBF8F1).copy(alpha = alpha),
+                topLeft = rect.topLeft,
+                size = rect.size,
+                cornerRadius = corner,
+            )
+
+            val pad = rect.width * 0.05f
+            val photoRect = Rect(
+                rect.left + pad,
+                rect.top + pad,
+                rect.right - pad,
+                rect.bottom - pad - rect.height * 0.13f,
+            )
+            if (img != null) {
+                clipRect(photoRect.left, photoRect.top, photoRect.right, photoRect.bottom) {
+                    drawCropped(img, photoRect, 1f, 0.5f, 0.5f, alpha)
+                }
+            } else {
+                drawRect(Color(0xFF2A2D35).copy(alpha = alpha), photoRect.topLeft, photoRect.size)
+            }
+
+            if (caption != null && textMeasurer != null) {
+                val style = TextStyle(
+                    color = Color(0xFF4A4438).copy(alpha = alpha),
+                    fontSize = (rect.width * 0.052f).toSp(),
+                    fontWeight = FontWeight.Normal,
+                    fontFamily = FontFamily.Serif,
+                    letterSpacing = (rect.width * 0.001f).toSp(),
+                )
+                var layout = textMeasurer.measure(caption, style, maxLines = 1)
+                // Shrink to fit the white strip instead of running off the card.
+                if (layout.size.width > photoRect.width && layout.size.width > 0) {
+                    val scale = photoRect.width / layout.size.width
+                    layout = textMeasurer.measure(
+                        caption,
+                        style.copy(fontSize = (rect.width * 0.052f * scale).toSp()),
+                        maxLines = 1,
+                    )
+                }
+                drawText(
+                    textLayoutResult = layout,
+                    topLeft = Offset(
+                        photoRect.left + (photoRect.width - layout.size.width) / 2f,
+                        photoRect.bottom + (rect.bottom - photoRect.bottom - layout.size.height) / 2f,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun DrawScope.drawTape(rect: Rect, rotation: Float, alpha: Float) {
+        withTransform({ rotate(rotation, rect.center) }) {
+            val tapeW = rect.width * 0.20f
+            val tapeH = rect.height * 0.058f
+            val top = rect.top - tapeH * 0.5f
+            // Two washi strips, tilted the other way from each other.
+            withTransform({
+                rotate(-7f, Offset(rect.left + rect.width * 0.16f, top + tapeH * 0.5f))
+            }) {
+                drawRect(
+                    color = Color(0xA6E4D8BE).copy(alpha = alpha),
+                    topLeft = Offset(rect.left + rect.width * 0.06f, top),
+                    size = Size(tapeW, tapeH),
+                )
+                drawRect(
+                    color = Color.White.copy(alpha = 0.22f * alpha),
+                    topLeft = Offset(rect.left + rect.width * 0.06f, top),
+                    size = Size(tapeW, tapeH * 0.35f),
+                )
+            }
+            withTransform({
+                rotate(6f, Offset(rect.right - rect.width * 0.16f, top + tapeH * 0.5f))
+            }) {
+                drawRect(
+                    color = Color(0xA6E4D8BE).copy(alpha = alpha),
+                    topLeft = Offset(rect.right - rect.width * 0.06f - tapeW, top),
+                    size = Size(tapeW, tapeH),
+                )
+                drawRect(
+                    color = Color.White.copy(alpha = 0.22f * alpha),
+                    topLeft = Offset(rect.right - rect.width * 0.06f - tapeW, top),
+                    size = Size(tapeW, tapeH * 0.35f),
+                )
+            }
+        }
+    }
+
+    private fun DrawScope.drawCropped(
+        img: ImageBitmap,
+        dst: Rect,
+        zoom: Float = 1f,
+        focusX: Float = 0.5f,
+        focusY: Float = 0.5f,
+        alpha: Float = 1f,
+    ) {
+        if (dst.width <= 1f || dst.height <= 1f || alpha <= 0.001f) return
+        val imgW = img.width.toFloat()
+        val imgH = img.height.toFloat()
+        if (imgW <= 0f || imgH <= 0f) return
+
+        val z = zoom.coerceAtLeast(1f)
+        val dstAspect = dst.width / dst.height
+        val imgAspect = imgW / imgH
+
+        var srcW: Float
+        var srcH: Float
+        if (imgAspect > dstAspect) {
+            srcH = imgH / z
+            srcW = srcH * dstAspect
+        } else {
+            srcW = imgW / z
+            srcH = srcW / dstAspect
+        }
+        srcW = srcW.coerceAtMost(imgW)
+        srcH = srcH.coerceAtMost(imgH)
+
+        val cx = focusX.coerceIn(0f, 1f) * imgW
+        val cy = focusY.coerceIn(0f, 1f) * imgH
+        val left = (cx - srcW / 2f).coerceIn(0f, (imgW - srcW).coerceAtLeast(0f))
+        val top = (cy - srcH / 2f).coerceIn(0f, (imgH - srcH).coerceAtLeast(0f))
+
+        drawImage(
+            image = img,
+            srcOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+            srcSize = IntSize(srcW.roundToInt().coerceAtLeast(1), srcH.roundToInt().coerceAtLeast(1)),
+            dstOffset = IntOffset(dst.left.roundToInt(), dst.top.roundToInt()),
+            dstSize = IntSize(dst.width.roundToInt().coerceAtLeast(1), dst.height.roundToInt().coerceAtLeast(1)),
+            alpha = alpha.coerceIn(0f, 1f),
+            filterQuality = FilterQuality.Medium,
+        )
+    }
+
+    private fun DrawScope.drawVignette(strength: Float) {
+        drawRect(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.Transparent,
+                    Color.Black.copy(alpha = strength),
+                ),
+                center = center,
+                radius = max(size.width, size.height) * 0.78f,
+            ),
+        )
+    }
+
+    private fun DrawScope.drawPlaceholder(rect: Rect = Rect(Offset.Zero, size)) {
+        drawRect(
+            brush = Brush.linearGradient(
+                colors = listOf(Color(0xFF161A24), Color(0xFF0A0C11)),
+                start = rect.topLeft,
+                end = rect.bottomRight,
+            ),
+            topLeft = rect.topLeft,
+            size = rect.size,
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.05f),
+            radius = min(rect.width, rect.height) * 0.05f,
+            center = rect.center,
+        )
+    }
+
+    private fun DrawScope.drawEmptyState() {
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color(0xFF12151D), Color(0xFF05060A)),
+                startY = 0f,
+                endY = size.height,
+            ),
+        )
+    }
+
+    private fun fitRect(img: ImageBitmap, box: Rect): Rect {
+        if (img.width <= 0 || img.height <= 0) return box
+        val aspect = img.width.toFloat() / img.height.toFloat()
+        var w = box.width
+        var h = w / aspect
+        if (h > box.height) {
+            h = box.height
+            w = h * aspect
+        }
+        return Rect(
+            box.center.x - w / 2f,
+            box.center.y - h / 2f,
+            box.center.x + w / 2f,
+            box.center.y + h / 2f,
+        )
+    }
+
+    private fun triangleOf(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float): Path =
+        Path().apply {
+            moveTo(ax, ay)
+            lineTo(bx, by)
+            lineTo(cx, cy)
+            close()
+        }
+
+    private const val HALF_PI = (Math.PI / 2).toFloat()
+}
+
+/** DrawScope entry point, so call sites don't need the renderer receiver. */
+fun DrawScope.drawSlideshow(frame: SlideshowFrame, textMeasurer: TextMeasurer? = null) {
+    with(SlideshowRenderer) { renderSlideshow(frame, textMeasurer) }
+}

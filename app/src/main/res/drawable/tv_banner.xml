@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <!-- Background -->
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endColor="#FF0B0D1A"
+                android:endX="320"
+                android:endY="180"
+                android:startColor="#FF1D2340"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Warm glow -->
+    <path android:pathData="M0,0h320v180h-320z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="252"
+                android:centerY="34"
+                android:gradientRadius="170"
+                android:type="radial"
+                android:startColor="#66FF9A4D"
+                android:endColor="#00FF9A4D" />
+        </aapt:attr>
+    </path>
+
+    <!-- Back photo card -->
+    <group android:pivotX="96" android:pivotY="94" android:rotation="-11">
+        <path android:pathData="M44,44h96v72h-96z" android:fillColor="#FF3E4C7A" />
+    </group>
+
+    <!-- Middle photo card -->
+    <group android:pivotX="112" android:pivotY="92" android:rotation="7">
+        <path android:pathData="M62,38h100v74h-100z" android:fillColor="#FF5C6BA6" />
+        <path android:pathData="M62,38h100v74h-100z" android:fillAlpha="0.35" android:fillColor="#FFFFFFFF" />
+    </group>
+
+    <!-- Front photo card with landscape -->
+    <group android:pivotX="124" android:pivotY="94" android:rotation="-3">
+        <path android:pathData="M76,52h108v78h-108z" android:fillColor="#FFF7F4EE" />
+        <path android:pathData="M82,58h96v66h-96z" android:fillColor="#FF12203A" />
+        <path android:pathData="M82,58h96v40h-96z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:endColor="#FF3B1E5E"
+                    android:endX="178"
+                    android:endY="98"
+                    android:startColor="#FFFF8A3D"
+                    android:startX="82"
+                    android:startY="58"
+                    android:type="linear" />
+            </aapt:attr>
+        </path>
+        <path android:pathData="M82,124l26,-30l20,20l16,-14l34,24z" android:fillColor="#FF0A1220" />
+        <path android:pathData="M152,68m-8,0a8,8 0,1 0,16 0a8,8 0,1 0,-16 0" android:fillColor="#FFFFE2B8" />
+    </group>
+
+    <!-- Play badge -->
+    <path android:pathData="M238,90m-30,0a30,30 0,1 0,60 0a30,30 0,1 0,-60 0" android:fillColor="#CC000000" />
+    <path android:pathData="M238,90m-28,0a28,28 0,1 0,56 0a28,28 0,1 0,-56 0" android:fillColor="#FFFF9A4D" />
+    <path android:pathData="M231,78l20,12l-20,12z" android:fillColor="#FF120C08" />
+</vector>
