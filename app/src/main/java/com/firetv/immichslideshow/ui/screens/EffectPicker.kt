@@ -45,6 +45,7 @@ import androidx.tv.foundation.lazy.grid.itemsIndexed
 import androidx.tv.foundation.lazy.grid.rememberTvLazyGridState
 import com.firetv.immichslideshow.data.DemoLibrary
 import com.firetv.immichslideshow.data.Photo
+import com.firetv.immichslideshow.data.FitMode
 import com.firetv.immichslideshow.data.SlideshowPrefs
 import com.firetv.immichslideshow.slideshow.SlideshowBitmaps
 import com.firetv.immichslideshow.slideshow.SlideshowEffect
@@ -191,6 +192,17 @@ fun EffectPickerOverlay(
                     selected = prefs.vignette,
                     onClick = { onPrefsChange(prefs.copy(vignette = !prefs.vignette)) },
                 )
+                TvChip(
+                    label = "Fit",
+                    selected = prefs.fitMode.isFit,
+                    onClick = {
+                        onPrefsChange(
+                            prefs.copy(
+                                fitMode = if (prefs.fitMode.isFit) FitMode.Fill else FitMode.Fit,
+                            ),
+                        )
+                    },
+                )
                 Spacer(Modifier.weight(1f))
                 KeyHint(keys = "OK", label = "Apply")
             }
@@ -261,7 +273,7 @@ private fun EffectTile(
                     )
                     Text(
                         text = effect.tagline,
-                        color = Palette.MutedDim,
+                        color = Palette.Cream.copy(alpha = 0.62f),
                         fontSize = 10.sp,
                         lineHeight = 12.5.sp,
                         maxLines = 2,

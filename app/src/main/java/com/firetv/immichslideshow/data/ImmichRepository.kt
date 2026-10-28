@@ -31,6 +31,9 @@ class ImmichRepository(
     private val okHttp: OkHttpClient = client ?: defaultClient()
 
     private val json = Json {
+        // Without this, kotlinx omits fields that equal their default and the
+        // server silently falls back to its own page size and sort order.
+        encodeDefaults = true
         ignoreUnknownKeys = true
         isLenient = true
         explicitNulls = false
@@ -67,14 +70,28 @@ class ImmichRepository(
         api.getAlbum(albumId, withoutAssets = false).toDomain()
     }
 
+    /**
+     * Album photos, oldest first. Immich v2/v3 keeps assets out of the album
+     * payload, so they are paged in from the metadata search instead.
+     */
     suspend fun photos(albumId: String): Result<List<Photo>> = call {
-        api.getAlbum(albumId, withoutAssets = false)
-            .assets
-            .asSequence()
-            .filter { it.type.equals("IMAGE", ignoreCase = true) }
-            .filter { !it.isTrashed && !it.isArchived }
-            .map { it.toDomain() }
-            .toList()
+        val photos = ArrayList<Photo>()
+        var page = 1
+        while (photos.size < MAX_ALBUM_PHOTOS) {
+            val response = api.searchMetadata(
+                MetadataSearchDto(albumIds = listOf(albumId), size = SEARCH_PAGE, page = page),
+            )
+            val items = response.assets.items
+            if (items.isEmpty()) break
+            items.asSequence()
+                .filter { it.type.equals("IMAGE", ignoreCase = true) }
+                .filter { !it.isTrashed && !it.isArchived }
+                .mapTo(photos) { it.toDomain() }
+            // A short page means there is nothing after it.
+            if (items.size < SEARCH_PAGE) break
+            page++
+        }
+        photos
     }
 
     fun thumbnailUrl(assetId: String, preview: Boolean = true): String {
@@ -192,6 +209,11 @@ class ImmichRepository(
         else -> "Immich returned HTTP ${e.code()}."
     }
 }
+
+private const val SEARCH_PAGE = 1000
+
+/** Enough for any album a TV slideshow would want to walk through. */
+private const val MAX_ALBUM_PHOTOS = 5_000
 
 class ImmichException(
     message: String,

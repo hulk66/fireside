@@ -11,6 +11,7 @@ import coil.request.SuccessResult
 import coil.size.Scale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** Where slideshow frames come from — Immich, or locally generated demo art. */
 interface PhotoBitmapSource {
@@ -62,6 +63,12 @@ class DemoBitmapSource : PhotoBitmapSource {
 
     override suspend fun load(photo: Photo, width: Int, height: Int): ImageBitmap? =
         withContext(Dispatchers.Default) {
-            runCatching { DemoLibrary.bitmap(photo.id, width, height) }.getOrNull()
+            runCatching {
+                // Generate at the photo's own shape, so a portrait demo shot is
+                // really portrait and the justified grid lays it out correctly.
+                val aspect = photo.aspectRatio ?: (width.toFloat() / height.coerceAtLeast(1))
+                val artHeight = (width / aspect).roundToInt().coerceIn(64, width * 3)
+                DemoLibrary.bitmap(photo.id, width, artHeight)
+            }.getOrNull()
         }
 }

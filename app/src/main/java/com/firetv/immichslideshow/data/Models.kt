@@ -78,7 +78,7 @@ fun AssetDto.toDomain(): Photo = Photo(
     id = id,
     fileName = originalFileName.ifBlank { id },
     takenAt = fileCreatedAt ?: exifInfo?.dateTimeOriginal ?: localDateTime,
-    width = exifInfo?.imageWidth,
-    height = exifInfo?.imageHeight,
+    width = width.takeIf { it > 0 } ?: exifInfo?.imageWidth,
+    height = height.takeIf { it > 0 } ?: exifInfo?.imageHeight,
     city = exifInfo?.city?.takeIf { it.isNotBlank() },
 )

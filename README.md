@@ -15,6 +15,10 @@ full-screen show and the animated thumbnails in the theme picker.
 - **Album browser** — covers, photo counts and dates straight from Immich.
 - **Ten themes** — Classic, Ken Burns, Slide, Flip, Fold, Shifting Tiles,
   Reflections, Scrapbook, Origami, Photo Grid.
+- **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
+  whole in their original aspect ratio on a dark backdrop.
+- **Flickr-style Photo Grid** — photos keep their aspect ratio, rows are
+  justified edge to edge, and the wall turns over one calm page at a time.
 - **Live theme picker** — every tile is an animated preview rendered by the real
   slideshow renderer, not a static image.
 - **Demo mode** — no server needed; 14 procedurally painted landscapes (multiple
@@ -86,8 +90,13 @@ with or without a scheme or a trailing `/api`.
 | BACK | close the picker / leave the album / exit |
 
 Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`,
-`slideshow_shuffle`, `slideshow_caption`, `slideshow_vignette`,
-`slideshow_pan`) and are re-applied live while a show is running.
+`slideshow_shuffle`, `slideshow_caption`, `slideshow_vignette`, `slideshow_pan`,
+`slideshow_fit`) and are re-applied live while a show is running.
+
+`Fit` in the theme picker is the aspect-ratio switch: off (the default) crops
+each photo to fill the screen, on shows the whole frame with bars. The Photo
+Grid keeps filling regardless — it is a mosaic of crops, and letterboxing every
+tile would fill the wall with bars.
 
 ## Architecture
 
@@ -116,6 +125,12 @@ pans and zooms the same way — previews do not jitter between recompositions.
 
 Captions are sized relative to the canvas (`height * 0.052`), which is why a
 40 dp thumbnail and a 1080p frame both read correctly from one code path.
+
+The Photo Grid is laid out by `JustifiedGrid`: a dynamic program splits the page
+into rows so that every row is filled edge to edge at a similar height, then the
+heights are nudged so the mosaic meets all four screen edges. `GridPlan` owns the
+page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
+staggered moments, and the prefetch window is exactly two pages.
 
 ## Layout notes
 

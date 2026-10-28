@@ -3,6 +3,23 @@ package com.firetv.immichslideshow.data
 import com.firetv.immichslideshow.slideshow.SlideshowEffect
 import com.firetv.immichslideshow.slideshow.SlideshowTiming
 
+/** How a photo is laid into the 16:9 frame. */
+enum class FitMode {
+    /** Crop and scale so the picture covers the screen — no bars, some edges lost. */
+    Fill,
+
+    /** Original aspect ratio: the whole photo is visible, with bars around it. */
+    Fit,
+    ;
+
+    val isFit: Boolean get() = this == Fit
+
+    companion object {
+        fun fromName(name: String?): FitMode =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Fill
+    }
+}
+
 /** User-tunable slideshow behaviour, persisted between launches. */
 data class SlideshowPrefs(
     val effect: SlideshowEffect = SlideshowEffect.KEN_BURNS,
@@ -13,6 +30,7 @@ data class SlideshowPrefs(
     val vignette: Boolean = true,
     /** 0 = still, 1 = default drift, 2 = pronounced Ken Burns. */
     val panIntensity: Float = 1f,
+    val fitMode: FitMode = FitMode.Fill,
 ) {
     val timing: SlideshowTiming
         get() = SlideshowTiming.forEffect(effect, secondsPerPhoto.toFloat())

@@ -278,11 +278,14 @@ private fun AlbumCard(
                             ),
                         ),
                 )
+                // One fact per place: the year sits on the cover, the photo count
+                // under the name, so nothing on the card repeats.
                 Text(
-                    text = "${album.assetCount}",
-                    color = Palette.Cream,
+                    text = album.yearLabel ?: "${album.assetCount}",
+                    color = Palette.Cream.copy(alpha = 0.92f),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.2.sp,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
@@ -290,17 +293,6 @@ private fun AlbumCard(
                         .background(Color(0xB305070A))
                         .padding(horizontal = 11.dp, vertical = 5.dp),
                 )
-                album.yearLabel?.let { year ->
-                    Text(
-                        text = year,
-                        color = Palette.Cream.copy(alpha = 0.9f),
-                        fontSize = 13.sp,
-                        letterSpacing = 1.2.sp,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(14.dp),
-                    )
-                }
                 if (focused) {
                     Box(
                         Modifier
@@ -321,7 +313,8 @@ private fun AlbumCard(
                 color = Palette.Cream,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
-                maxLines = 1,
+                lineHeight = 22.sp,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(3.dp))
@@ -329,7 +322,6 @@ private fun AlbumCard(
                 text = buildString {
                     append(album.assetCount)
                     append(if (album.assetCount == 1) " photo" else " photos")
-                    album.yearLabel?.let { append(" · ").append(it) }
                 },
                 color = Palette.MutedDim,
                 fontSize = 13.sp,

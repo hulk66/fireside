@@ -3,7 +3,7 @@ package com.firetv.immichslideshow.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Wire models for the Immich REST API (v1.x). Unknown fields are ignored. */
+/** Wire models for the Immich REST API. Unknown fields are ignored. */
 
 @Serializable
 data class AlbumDto(
@@ -29,6 +29,9 @@ data class AssetDto(
     val fileCreatedAt: String? = null,
     val localDateTime: String? = null,
     val thumbhash: String? = null,
+    /** Pixel size of the original; drives the justified layout of the grid. */
+    val width: Int = 0,
+    val height: Int = 0,
     val isTrashed: Boolean = false,
     val isArchived: Boolean = false,
     val exifInfo: ExifDto? = null,
@@ -46,6 +49,30 @@ data class ExifDto(
     val country: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
+)
+
+/** Body of `POST /api/search/metadata`, the source of album photos in v2/v3. */
+@Serializable
+data class MetadataSearchDto(
+    val albumIds: List<String> = emptyList(),
+    val size: Int = 1000,
+    val page: Int = 1,
+    /** `asc` keeps a slideshow in chronological order, oldest frame first. */
+    val order: String = "asc",
+    val withExif: Boolean = true,
+)
+
+@Serializable
+data class MetadataSearchResponseDto(
+    val assets: SearchAssetsDto = SearchAssetsDto(),
+)
+
+@Serializable
+data class SearchAssetsDto(
+    /** Note: Immich reports the page size here, not the album total. */
+    val total: Int = 0,
+    val count: Int = 0,
+    val items: List<AssetDto> = emptyList(),
 )
 
 @Serializable

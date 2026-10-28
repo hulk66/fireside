@@ -78,45 +78,77 @@ data class GridTile(
     val mix: Float,
 )
 
+/** One page of the mosaic: which photos are on the wall and how they fade in. */
+data class GridPage(
+    val generation: Long,
+    /** Photo index for each slot of the justified layout, left to right. */
+    val indices: List<Int>,
+    val tiles: List<GridTile>,
+)
+
+/**
+ * Drives the Photo Grid mosaic in pages.
+ *
+ * A page is a fixed window of photos laid out by [JustifiedGrid]; the tiles flip
+ * over once per page at staggered moments, so the wall is alive without any of
+ * the per-tile churn that made it flicker. Keeping the window stable for a whole
+ * page also keeps the layout stable, which is what a justified grid needs.
+ */
 object GridPlan {
-    const val COLUMNS = 5
-    const val ROWS = 3
-    const val SLOTS = COLUMNS * ROWS
-
-    /** How long a single tile waits before it swaps to the next photo. */
-    const val TILE_CYCLE_MS = 12_000L
-
-    private const val FADE_FRACTION = 0.22f
-
     /**
-     * Tiles swap at staggered moments, so the mosaic is continuously alive
-     * instead of flipping in one hard cut.
+     * Photos on the wall at once. Twelve splits into three even rows on a 16:9
+     * screen; more photos than that forces the rows to be scaled hard to meet
+     * the edges, which crops them away.
      */
-    fun tiles(elapsedMs: Long, count: Int): List<GridTile> {
+    const val SLOTS = 12
+
+    /** How long one page of photos stays up. */
+    const val PAGE_MS = 16_000L
+
+    /** Share of a page over which the tiles flip, first to last. */
+    private const val STAGGER = 0.30f
+
+    /** How long one tile takes to cross-fade, as a share of a page. */
+    private const val FADE = 0.075f
+
+    /** Photo indices for one page, wrapping around the album. */
+    fun indicesFor(generation: Long, count: Int): List<Int> {
         if (count <= 0) return emptyList()
-        val out = ArrayList<GridTile>(SLOTS)
-        for (slot in 0 until SLOTS) {
-            val offset = TILE_CYCLE_MS * slot / SLOTS
-            val phase = (elapsedMs + offset).toDouble() / TILE_CYCLE_MS.toDouble()
-            val generation = kotlin.math.floor(phase).toLong()
-            val local = (phase - generation).toFloat()
-            val fadeStart = 1f - FADE_FRACTION
-            val rawMix = ((local - fadeStart) / FADE_FRACTION).coerceIn(0f, 1f)
-            val from = SlideshowTimeline.floorMod(slot * 3L + generation, count.toLong()).toInt()
-            val to = SlideshowTimeline.floorMod(slot * 3L + generation + 1L, count.toLong()).toInt()
-            out.add(GridTile(slot, from, to, Easing.smoothstep(rawMix)))
-        }
-        return out
+        val start = Math.floorMod(generation * SLOTS, count.toLong())
+        return List(SLOTS) { slot -> ((start + slot) % count).toInt() }
     }
 
-    /** Photo indices the player should keep decoded for the grid. */
+    /** The wall at [elapsedMs]: which page, which photos, and how far each fade is. */
+    fun pageAt(elapsedMs: Long, count: Int): GridPage {
+        if (count <= 0) return GridPage(0L, emptyList(), emptyList())
+        val generation = Math.floorDiv(elapsedMs, PAGE_MS)
+        val local = ((elapsedMs - generation * PAGE_MS).toFloat() / PAGE_MS).coerceIn(0f, 1f)
+        val indices = indicesFor(generation, count)
+        val previous = indicesFor(generation - 1, count)
+
+        val first = generation <= 0L
+        val tiles = indices.mapIndexed { slot, index ->
+            val start = STAGGER * slot / SLOTS
+            val raw = ((local - start) / FADE).coerceIn(0f, 1f)
+            // The first page has nothing to fade from.
+            val mix = if (first) 1f else Easing.smoothstep(raw)
+            val from = if (first) index else previous.getOrElse(slot) { index }
+            GridTile(slot, from, index, mix)
+        }
+        return GridPage(generation, indices, tiles)
+    }
+
+    /**
+     * Photos the player should keep decoded: this page and the next one, which is
+     * all a page ever needs — plus the previous page still on screen while the
+     * tiles flip over.
+     */
     fun prefetchIndices(elapsedMs: Long, count: Int): List<Int> {
         if (count <= 0) return emptyList()
-        val indices = LinkedHashSet<Int>()
-        for (tile in tiles(elapsedMs, count)) {
-            indices.add(tile.fromIndex)
-            indices.add(tile.toIndex)
-        }
+        val page = pageAt(elapsedMs, count)
+        val indices = LinkedHashSet<Int>(SLOTS * 2)
+        indices.addAll(page.indices)
+        indices.addAll(indicesFor(page.generation + 1, count))
         return indices.toList()
     }
 }

@@ -61,7 +61,7 @@ class SlideshowController(
             size > FULL_CACHE_SIZE
     }
 
-    private val tileCache = object : LinkedHashMap<Int, ImageBitmap>(32, 0.75f, true) {
+    private val tileCache = object : LinkedHashMap<Int, ImageBitmap>(TILE_CACHE_SIZE, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, ImageBitmap>): Boolean =
             size > TILE_CACHE_SIZE
     }
@@ -249,7 +249,12 @@ class SlideshowController(
 
     private companion object {
         const val FULL_CACHE_SIZE = 6
-        const val TILE_CACHE_SIZE = 24
+        /**
+         * A grid page wants 30 photos (this page plus the next), and the page
+         * before it is still on screen while the tiles flip, so the cache has to
+         * hold well over two pages or the LRU thrashes and the wall flickers.
+         */
+        const val TILE_CACHE_SIZE = 64
         const val RETRY_AFTER_MS = 15_000L
     }
 }

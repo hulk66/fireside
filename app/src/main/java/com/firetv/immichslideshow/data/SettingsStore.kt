@@ -49,6 +49,7 @@ class SettingsStore(context: Context) {
             putBoolean(KEY_CAPTION, updated.showCaption)
             putBoolean(KEY_VIGNETTE, updated.vignette)
             putFloat(KEY_PAN, updated.panIntensity)
+            putString(KEY_FIT, updated.fitMode.name)
         }.apply()
     }
 
@@ -70,6 +71,7 @@ class SettingsStore(context: Context) {
         showCaption = prefs.getBoolean(KEY_CAPTION, true),
         vignette = prefs.getBoolean(KEY_VIGNETTE, true),
         panIntensity = prefs.getFloat(KEY_PAN, 1f).coerceIn(0f, 2f),
+        fitMode = FitMode.fromName(prefs.getString(KEY_FIT, null)),
     )
 
     private companion object {
@@ -82,5 +84,6 @@ class SettingsStore(context: Context) {
         const val KEY_CAPTION = "slideshow_caption"
         const val KEY_VIGNETTE = "slideshow_vignette"
         const val KEY_PAN = "slideshow_pan"
+        const val KEY_FIT = "slideshow_fit"
     }
 }

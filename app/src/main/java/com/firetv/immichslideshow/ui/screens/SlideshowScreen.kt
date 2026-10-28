@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.firetv.immichslideshow.AppContainer
 import com.firetv.immichslideshow.data.Album
+import com.firetv.immichslideshow.data.FitMode
 import com.firetv.immichslideshow.data.DemoLibrary
 import com.firetv.immichslideshow.data.ImmichConfig
 import com.firetv.immichslideshow.data.Photo
@@ -222,7 +223,9 @@ private fun SlideshowPlayer(
         return true
     }
 
-    BackHandler { onExit() }
+    // While the theme picker is open its own BackHandler owns the key; leaving
+    // this one enabled would let a single press fall through and stop playback.
+    BackHandler(enabled = !menuOpen) { onExit() }
 
     Box(
         Modifier
@@ -261,6 +264,7 @@ private fun SlideshowPlayer(
                 album = album,
                 info = info,
                 paused = controller.paused,
+                fitMode = prefs.fitMode,
             )
         }
 
@@ -284,6 +288,7 @@ private fun SlideshowChrome(
     album: Album,
     info: SlideshowController.ChromeInfo,
     paused: Boolean,
+    fitMode: FitMode,
 ) {
     val progress by animateFloatAsState(
         targetValue = info.progress.coerceIn(0f, 1f),
@@ -318,6 +323,7 @@ private fun SlideshowChrome(
                         append("  ·  ")
                         append(info.secondsPerPhoto)
                         append("s per photo")
+                        if (fitMode.isFit) append("  ·  Fit")
                         if (paused) append("  ·  Paused")
                     },
                     color = Palette.AmberSoft.copy(alpha = 0.85f),

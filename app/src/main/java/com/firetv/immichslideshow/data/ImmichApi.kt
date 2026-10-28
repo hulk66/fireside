@@ -1,6 +1,8 @@
 package com.firetv.immichslideshow.data
 
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -19,6 +21,13 @@ interface ImmichApi {
         @Path("id") id: String,
         @Query("withoutAssets") withoutAssets: Boolean = false,
     ): AlbumDto
+
+    /**
+     * Immich v2/v3 no longer embeds assets in the album payload, so the photo
+     * list comes from the metadata search, paged with [MetadataSearchDto.page].
+     */
+    @POST("api/search/metadata")
+    suspend fun searchMetadata(@Body body: MetadataSearchDto): MetadataSearchResponseDto
 
     @GET("api/server/ping")
     suspend fun ping(): PingDto
