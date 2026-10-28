@@ -36,8 +36,11 @@ class SlideshowController(
      * Square, not 16:9: a grid cell is as often portrait as landscape, and a
      * 16:9 decode of a portrait photo is only 270 px wide — visibly soft once it
      * is stretched into a tall cell. `Scale.FIT` keeps each photo's own shape.
+     *
+     * 600 covers the largest cell a 1080p wall produces (about 500 px on the
+     * long side, plus the scale-up when the mosaic has to fill the frame).
      */
-    private val tileDecodeSize: IntSize = IntSize(640, 640),
+    private val tileDecodeSize: IntSize = IntSize(600, 600),
     private val scrapbookTileSize: IntSize = IntSize(640, 640),
 ) {
 
@@ -136,8 +139,12 @@ class SlideshowController(
 
     private fun prefetch(index: Int, transition: Float) {
         if (prefs.effect.mosaic) {
-            for (i in GridPlan.prefetchIndices(elapsedMs, photos.size)) request(i, tile = true)
-            request(index, tile = false)
+            // Exactly the wall's own window plus the next page, using the same
+            // page size the renderer lays out with. A different size here means
+            // a different window of photos, and every cell draws empty.
+            for (i in GridPlan.prefetchIndices(elapsedMs, ordered.size, gridSlots)) {
+                request(i, tile = true)
+            }
             return
         }
         if (prefs.effect == SlideshowEffect.SCRAPBOOK) {
@@ -145,14 +152,6 @@ class SlideshowController(
             // drawn full-frame, so tiles alone keep the table stocked and leave
             // the full-frame cache (and its 8 MB bitmaps) alone.
             for (k in 0 until ScrapbookDesk.CARDS) request(index - k, tile = true)
-            return
-        }
-        if (prefs.effect == SlideshowEffect.PHOTO_GRID) {
-            // Exactly the wall's own window plus the next page, which is what the
-            // renderer will ask for — no more, or the LRU evicts live tiles.
-            for (i in GridPlan.prefetchIndices(elapsedMs, ordered.size, gridSlots)) {
-                request(i, tile = true)
-            }
             return
         }
         request(index - 1, tile = false)
@@ -288,7 +287,7 @@ class SlideshowController(
          * before it is still on screen while the tiles flip, so the cache has to
          * hold well over two pages or the LRU thrashes and the wall flickers.
          */
-        const val TILE_CACHE_SIZE = 40
+        const val TILE_CACHE_SIZE = 50
         const val RETRY_AFTER_MS = 15_000L
     }
 }

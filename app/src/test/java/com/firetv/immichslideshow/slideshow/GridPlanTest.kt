@@ -10,8 +10,8 @@ class GridPlanTest {
     fun `page size follows the album's shapes`() {
         // A 4:3 album wants three rows of four on a 16:9 screen.
         assertEquals(12, GridPlan.slotsFor(List(30) { 1.333f }))
-        // A 3:4 album wants three rows of six or seven.
-        assertEquals(20, GridPlan.slotsFor(List(30) { 0.75f }))
+        // A 3:4 album wants three rows of seven.
+        assertEquals(21, GridPlan.slotsFor(List(30) { 0.75f }))
         // A mix of both lands in between.
         val mixed = List(15) { 0.75f } + List(15) { 1.333f }
         assertEquals(15, GridPlan.slotsFor(mixed))
@@ -19,16 +19,16 @@ class GridPlanTest {
 
     @Test
     fun `page size stays in a sane range`() {
-        assertTrue(GridPlan.slotsFor(emptyList()) in 9..20)
-        assertTrue(GridPlan.slotsFor(List(10) { 0.2f }) in 9..20)
-        assertTrue(GridPlan.slotsFor(List(10) { 8f }) in 9..20)
-        assertTrue(GridPlan.slotsFor(List(10) { Float.NaN }) in 9..20)
+        assertTrue(GridPlan.slotsFor(emptyList()) in 9..21)
+        assertTrue(GridPlan.slotsFor(List(10) { 0.2f }) in 9..21)
+        assertTrue(GridPlan.slotsFor(List(10) { 8f }) in 9..21)
+        assertTrue(GridPlan.slotsFor(List(10) { Float.NaN }) in 9..21)
     }
 
     @Test
     fun `a sized page uses exactly that many slots`() {
         assertEquals(12, GridPlan.indicesFor(0, 100, slots = 12).size)
-        assertEquals(20, GridPlan.pageAt(0, 100, slots = 20).tiles.size)
+        assertEquals(21, GridPlan.pageAt(0, 100, slots = 21).tiles.size)
         assertEquals(24, GridPlan.prefetchIndices(0, 100, slots = 12).size)
     }
 
@@ -107,6 +107,24 @@ class GridPlanTest {
         val indices = GridPlan.prefetchIndices(0, 5)
         assertTrue(indices.isNotEmpty())
         indices.forEach { assertTrue(it in 0 until 5) }
+    }
+
+    @Test
+    fun `prefetch covers every photo the wall draws`() {
+        // The player decodes exactly what prefetchIndices returns, and the wall
+        // draws from pageAt. If the two disagree - a page size passed to one and
+        // not the other - every cell comes up empty, so pin them together.
+        for (slots in listOf(9, 12, 13, 15, 16, 20)) {
+            for (elapsed in listOf(0L, GridPlan.PAGE_MS / 3, GridPlan.PAGE_MS, GridPlan.PAGE_MS * 5 + 400)) {
+                val page = GridPlan.pageAt(elapsed, 340, slots)
+                val drawn = page.tiles.flatMap { listOf(it.fromIndex, it.toIndex) }.toSet()
+                val prefetched = GridPlan.prefetchIndices(elapsed, 340, slots).toSet()
+                assertTrue(
+                    "slots=$slots elapsed=$elapsed: wall draws ${drawn - prefetched} that is never prefetched",
+                    prefetched.containsAll(drawn),
+                )
+            }
+        }
     }
 
     @Test

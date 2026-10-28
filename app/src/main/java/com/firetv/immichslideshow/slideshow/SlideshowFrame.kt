@@ -114,7 +114,7 @@ object GridPlan {
         val usable = aspects.filter { it.isFinite() && it > 0.05f }
         if (usable.isEmpty()) return SLOTS
         val average = (usable.sumOf { it.toDouble() } / usable.size).toFloat().coerceIn(0.7f, 2.0f)
-        return (16f / average).toInt().coerceIn(9, 20)
+        return (16f / average).toInt().coerceIn(9, 21)
     }
 
     /** How long one page of photos stays up. */
@@ -158,12 +158,26 @@ object GridPlan {
      * all a page ever needs — plus the previous page still on screen while the
      * tiles flip over.
      */
+    /**
+     * Photos the player must keep decoded.
+     *
+     * Early in a page the wall is still drawing the previous page's photos while
+     * they fade out, so those are requested; by half way every tile has flipped
+     * (the stagger ends at [STAGGER] + [FADE]), so from then on the next page is
+     * warmed instead. The window is therefore never more than two pages, which is
+     * what keeps the tile cache from thrashing.
+     */
     fun prefetchIndices(elapsedMs: Long, count: Int, slots: Int = SLOTS): List<Int> {
         if (count <= 0 || slots <= 0) return emptyList()
         val page = pageAt(elapsedMs, count, slots)
+        val local = ((elapsedMs - page.generation * PAGE_MS).toFloat() / PAGE_MS).coerceIn(0f, 1f)
         val indices = LinkedHashSet<Int>(slots * 2)
         indices.addAll(page.indices)
-        indices.addAll(indicesFor(page.generation + 1, count, slots))
+        if (local < 0.5f) {
+            indices.addAll(indicesFor(page.generation - 1, count, slots))
+        } else {
+            indices.addAll(indicesFor(page.generation + 1, count, slots))
+        }
         return indices.toList()
     }
 }

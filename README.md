@@ -145,8 +145,14 @@ at a fraction of a percent instead of a third of the screen.
 Whatever surplus remains is cropped horizontally rather than vertically, because
 the frame is wider than the photos are tall: cropping width takes a slice off a
 landscape photo's long side, while cropping height would eat the short side of the
-photos in the outer rows. Tiles decode square (640 × 640, `Scale.FIT`), so a
-portrait photo keeps its full width at a usable resolution. `GridPlan` owns the
+photos in the outer rows. Tiles decode square (600 × 600, `Scale.FIT`), so a
+portrait photo keeps its full width at a usable resolution.
+
+The prefetch window is exactly what the wall draws — the current page plus the
+previous one early in the page (tiles are still fading out of it) or the next one
+late in the page. Both the player and the renderer must use the same page size:
+handing one of them a different size makes them request and draw different photos,
+and every cell comes up empty. A unit test pins that invariant. `GridPlan` owns the
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
