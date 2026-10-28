@@ -29,6 +29,19 @@ data class ImmichConfig(
         .removePrefix("https://")
         .trimEnd('/')
 
+    /**
+     * A safe way to say *which* key is in use without printing it: enough to
+     * tell a real key from a leftover placeholder at a glance.
+     */
+    fun keyHint(): String {
+        val key = apiKey.trim()
+        return when {
+            key.isEmpty() -> "no API key"
+            key.length <= 4 -> "API key ••••"
+            else -> "API key ••••" + key.takeLast(4)
+        }
+    }
+
     fun sanitized(): ImmichConfig = copy(
         baseUrl = normalizedBaseUrl().trimEnd('/'),
         apiKey = apiKey.trim(),

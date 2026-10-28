@@ -65,6 +65,20 @@ class ImmichConfigTest {
     }
 
     @Test
+    fun `the key hint shows only the tail`() {
+        val config = ImmichConfig("https://photos.example.org", "EXAMPLE-TEST-KEY-not-a-real-credential-u5DQ")
+        assertEquals("API key ••••u5DQ", config.keyHint())
+        assertEquals("API key ••••", ImmichConfig("https://x.org", "abc").keyHint())
+        assertEquals("no API key", ImmichConfig("https://x.org", "   ").keyHint())
+    }
+
+    @Test
+    fun `the key hint never leaks a short key`() {
+        val config = ImmichConfig("https://x.org", "abcd")
+        assertFalse(config.keyHint().contains("abcd"))
+    }
+
+    @Test
     fun `demo config is marked as demo`() {
         assertTrue(ImmichConfig.Demo.demo)
     }

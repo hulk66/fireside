@@ -149,8 +149,10 @@ fun AlbumListScreen(
                         modifier = Modifier.widthIn(max = 760.dp),
                     )
                     Spacer(Modifier.height(8.dp))
+                    // Which address and which key were actually used, so a
+                    // stale or placeholder key is visible instead of guessed at.
                     Text(
-                        text = "Using ${config.normalizedBaseUrl()}",
+                        text = "Using ${config.normalizedBaseUrl()}  ·  ${config.keyHint()}",
                         color = Palette.MutedDim,
                         fontSize = 13.sp,
                         maxLines = 1,
