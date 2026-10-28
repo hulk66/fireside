@@ -164,7 +164,10 @@ bottom. `ScrapbookDesk` owns the pile: which photos are on the desk, which one
 leaves, and each card's scattered placement.
 
 Cards are big (22–40 % of the frame width), vary in size, and are allowed to run
-past the screen edges, so the pile covers the table instead of sitting on it.
+past the screen edges, so the pile covers the table instead of sitting on it. A
+new card falls in from above the frame (`Easing.dropIn`: gravity acceleration, a
+small bounce on impact, the tilt straightening as it lands), and the card it
+replaces fades out in place.
 Only the newest three carry a caption — with twenty cards the rest are mostly
 buried. Scrapbook cards are the one place that never needs a full-frame decode,
 so that theme keeps only the tile cache warm.

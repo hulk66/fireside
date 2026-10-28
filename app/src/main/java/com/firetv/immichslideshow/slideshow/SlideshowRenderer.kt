@@ -479,45 +479,60 @@ object SlideshowRenderer {
             drawPlaceholder()
             return
         }
-        // The new card drops onto the pile over the first slice of the cycle;
+        // The new card falls onto the pile over the first slice of the cycle;
         // keying this off the cycle (not the transition) keeps it settled through
         // the hold.
-        val drop = Easing.backOut((frame.progress / 0.18f).coerceIn(0f, 1f), overshoot = 1.15f)
+        val fall = (frame.progress / 0.22f).coerceIn(0f, 1f)
+        val settle = Easing.dropIn(fall)
+        val fadeIn = (fall / 0.35f).coerceIn(0f, 1f)
 
         // The card that no longer fits fades out underneath the pile.
         ScrapbookDesk.leaving(frame.currentIndex, frame.count)?.let { going ->
-            if (drop < 1f) {
-                drawDeskCard(frame, going, textMeasurer, fit, drop = 1f - drop, caption = false)
+            if (fadeIn < 1f) {
+                drawDeskCard(
+                    frame = frame,
+                    photoIndex = going,
+                    textMeasurer = textMeasurer,
+                    fit = fit,
+                    alpha = 1f - fadeIn,
+                    settle = 1f,
+                    arriving = false,
+                    caption = false,
+                )
             }
         }
         // Oldest first, so the newest card lands on top of the pile.
         for (rank in visible.indices.reversed()) {
-            val index = visible[rank]
+            val newest = rank == 0
             drawDeskCard(
                 frame = frame,
-                photoIndex = index,
+                photoIndex = visible[rank],
                 textMeasurer = textMeasurer,
                 fit = fit,
-                drop = if (rank == 0) drop else 1f,
+                alpha = if (newest) fadeIn else 1f,
+                settle = if (newest) settle else 1f,
+                arriving = newest,
                 caption = rank < ScrapbookDesk.CAPTIONED,
             )
         }
     }
 
     /**
-     * Paints one polaroid of the desk. [drop] drives the arrival of a new card:
-     * 0 leaves it below the frame, 1 is settled in place.
+     * Paints one polaroid of the desk. [settle] drives the arrival of a new card:
+     * 0 leaves it above the frame, 1 is settled in place.
      */
     private fun DrawScope.drawDeskCard(
         frame: SlideshowFrame,
         photoIndex: Int,
         textMeasurer: TextMeasurer?,
         fit: Boolean,
-        drop: Float,
+        alpha: Float,
+        settle: Float,
+        arriving: Boolean,
         caption: Boolean,
     ) {
         val photo = frame.photos.getOrNull(photoIndex) ?: return
-        val alpha = drop.coerceIn(0f, 1f)
+        val alpha = alpha.coerceIn(0f, 1f)
         if (alpha <= 0.01f) return
 
         val w = size.width
@@ -533,22 +548,27 @@ object SlideshowRenderer {
             cardH = cardW * (1.034f / aspect + 0.10f)
         }
 
-        val lift = (1f - drop).coerceIn(0f, 1f)
-        val scale = 0.94f + 0.06f * drop.coerceIn(0f, 1f)
+        // The card falls in from above the top edge and settles onto the pile;
+        // once it has landed it simply stays put.
+        val fall = if (arriving) (1f - settle).coerceIn(0f, 1f) else 0f
+        val scale = 1f + 0.05f * fall
         val halfW = cardW * scale / 2f
         val halfH = cardH * scale / 2f
         // A card may hang over an edge, but never by more than about a quarter
-        // of itself, so nothing is ever half off the screen.
+        // of itself, so nothing is ever half off the screen. Only the resting
+        // place is clamped — the fall itself starts well above the frame.
         val cx = (w * place.cx).coerceIn(halfW * 0.5f, w - halfW * 0.5f)
-        val cy = (h * place.cy + lift * h * 0.35f).coerceIn(halfH * 0.5f, h - halfH * 0.5f)
+        val cy = (h * place.cy).coerceIn(halfH * 0.5f, h - halfH * 0.5f) - fall * h * 0.75f
 
+        // The card tilts a little more while falling and straightens as it lands.
+        val rotation = place.rotation + fall * if (place.rotation >= 0f) 7f else -7f
         val cardRect = Rect(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
         // Tiles are plenty for a card this size and keep the full-frame cache free.
         val bitmap = frame.bitmaps.full(photoIndex) ?: frame.bitmaps.tile(photoIndex)
         drawPolaroid(
             img = bitmap,
             rect = cardRect,
-            rotation = place.rotation,
+            rotation = rotation,
             caption = if (caption) photo.caption else null,
             textMeasurer = textMeasurer,
             alpha = alpha,
@@ -556,9 +576,10 @@ object SlideshowRenderer {
         )
 
         // A little washi tape on every third card, so the pile reads as paper.
-        if (photo.id.hashCode().mod(3) == 0 || lift > 0f) {
-            val tapeAlpha = if (lift > 0f) ((drop - 0.65f) / 0.35f).coerceIn(0f, 1f) else alpha
-            if (tapeAlpha > 0.02f) drawTape(cardRect, place.rotation, tapeAlpha)
+        // Tape is stuck on only after the card has landed.
+        if (photo.id.hashCode().mod(3) == 0 || arriving) {
+            val tapeAlpha = if (arriving) ((settle - 0.85f) / 0.15f).coerceIn(0f, 1f) else alpha
+            if (tapeAlpha > 0.02f) drawTape(cardRect, rotation, tapeAlpha)
         }
     }
 

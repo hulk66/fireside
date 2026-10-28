@@ -42,5 +42,22 @@ object Easing {
         return 1f + c3 * (x - 1f) * (x - 1f) * (x - 1f) + overshoot * (x - 1f) * (x - 1f)
     }
 
+    /**
+     * A card falling onto a pile: it accelerates like gravity, lands a little
+     * past the mark, then bounces back up to rest. 0 is "still falling", 1 is
+     * "settled"; the curve overshoots [bounce] at the moment of impact.
+     */
+    fun dropIn(t: Float, bounce: Float = 0.07f): Float {
+        val x = t.coerceIn(0f, 1f)
+        val land = 0.72f
+        return if (x < land) {
+            val p = x / land
+            p * p * (1f + bounce)
+        } else {
+            val p = easeOutCubic((x - land) / (1f - land))
+            1f + bounce * (1f - p)
+        }
+    }
+
     fun lerp(start: Float, end: Float, t: Float): Float = start + (end - start) * t
 }
