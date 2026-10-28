@@ -32,6 +32,8 @@ data class SlideshowFrame(
     val photos: List<Photo>,
     val prefs: SlideshowPrefs,
     val bitmaps: SlideshowBitmaps,
+    /** Photos on the Photo Grid wall; sized to the album's shapes by the player. */
+    val gridSlots: Int = GridPlan.SLOTS,
 ) {
     val count: Int get() = photos.size
     val hasPhotos: Boolean get() = photos.isNotEmpty()
@@ -95,12 +97,25 @@ data class GridPage(
  * page also keeps the layout stable, which is what a justified grid needs.
  */
 object GridPlan {
+    /** Fallback page size when the album's shapes are unknown. */
+    const val SLOTS = 15
+
     /**
-     * Photos on the wall at once. Twelve splits into three even rows on a 16:9
-     * screen; more photos than that forces the rows to be scaled hard to meet
-     * the edges, which crops them away.
+     * Photos per page, from the album's shapes.
+     *
+     * Three rows of photos fill a 16:9 frame when the page holds
+     * `3 · 3 · (16/9) / aspect` of them, i.e. `16 / aspect` — a 4:3 album wants
+     * twelve, a 3:4 album twenty, a mix of both fifteen. Sizing the page to the
+     * album is what keeps the mosaic from having to be scaled (and cropped) hard:
+     * a mismatch here is what cuts whole cells in half.
      */
-    const val SLOTS = 12
+    fun slotsFor(aspects: List<Float>): Int {
+        if (aspects.isEmpty()) return SLOTS
+        val usable = aspects.filter { it.isFinite() && it > 0.05f }
+        if (usable.isEmpty()) return SLOTS
+        val average = (usable.sumOf { it.toDouble() } / usable.size).toFloat().coerceIn(0.7f, 2.0f)
+        return (16f / average).toInt().coerceIn(9, 20)
+    }
 
     /** How long one page of photos stays up. */
     const val PAGE_MS = 16_000L
@@ -112,23 +127,23 @@ object GridPlan {
     private const val FADE = 0.075f
 
     /** Photo indices for one page, wrapping around the album. */
-    fun indicesFor(generation: Long, count: Int): List<Int> {
-        if (count <= 0) return emptyList()
-        val start = Math.floorMod(generation * SLOTS, count.toLong())
-        return List(SLOTS) { slot -> ((start + slot) % count).toInt() }
+    fun indicesFor(generation: Long, count: Int, slots: Int = SLOTS): List<Int> {
+        if (count <= 0 || slots <= 0) return emptyList()
+        val start = Math.floorMod(generation * slots, count.toLong())
+        return List(slots) { slot -> ((start + slot) % count).toInt() }
     }
 
     /** The wall at [elapsedMs]: which page, which photos, and how far each fade is. */
-    fun pageAt(elapsedMs: Long, count: Int): GridPage {
-        if (count <= 0) return GridPage(0L, emptyList(), emptyList())
+    fun pageAt(elapsedMs: Long, count: Int, slots: Int = SLOTS): GridPage {
+        if (count <= 0 || slots <= 0) return GridPage(0L, emptyList(), emptyList())
         val generation = Math.floorDiv(elapsedMs, PAGE_MS)
         val local = ((elapsedMs - generation * PAGE_MS).toFloat() / PAGE_MS).coerceIn(0f, 1f)
-        val indices = indicesFor(generation, count)
-        val previous = indicesFor(generation - 1, count)
+        val indices = indicesFor(generation, count, slots)
+        val previous = indicesFor(generation - 1, count, slots)
 
         val first = generation <= 0L
         val tiles = indices.mapIndexed { slot, index ->
-            val start = STAGGER * slot / SLOTS
+            val start = STAGGER * slot / slots
             val raw = ((local - start) / FADE).coerceIn(0f, 1f)
             // The first page has nothing to fade from.
             val mix = if (first) 1f else Easing.smoothstep(raw)
@@ -143,12 +158,12 @@ object GridPlan {
      * all a page ever needs — plus the previous page still on screen while the
      * tiles flip over.
      */
-    fun prefetchIndices(elapsedMs: Long, count: Int): List<Int> {
-        if (count <= 0) return emptyList()
-        val page = pageAt(elapsedMs, count)
-        val indices = LinkedHashSet<Int>(SLOTS * 2)
+    fun prefetchIndices(elapsedMs: Long, count: Int, slots: Int = SLOTS): List<Int> {
+        if (count <= 0 || slots <= 0) return emptyList()
+        val page = pageAt(elapsedMs, count, slots)
+        val indices = LinkedHashSet<Int>(slots * 2)
         indices.addAll(page.indices)
-        indices.addAll(indicesFor(page.generation + 1, count))
+        indices.addAll(indicesFor(page.generation + 1, count, slots))
         return indices.toList()
     }
 }

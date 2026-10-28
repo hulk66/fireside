@@ -654,7 +654,7 @@ object SlideshowRenderer {
         val h = size.height
         drawRect(Color(0xFF07080B))
 
-        val page = GridPlan.pageAt(frame.elapsedMs, frame.count)
+        val page = GridPlan.pageAt(frame.elapsedMs, frame.count, frame.gridSlots)
         if (page.tiles.isEmpty()) {
             drawPlaceholder()
             return
@@ -667,7 +667,7 @@ object SlideshowRenderer {
             return
         }
         val previousCells = if (page.generation > 0L) {
-            justifiedCells(frame, GridPlan.indicesFor(page.generation - 1, frame.count), w, h, gap)
+            justifiedCells(frame, GridPlan.indicesFor(page.generation - 1, frame.count, frame.gridSlots), w, h, gap)
         } else {
             currentCells
         }

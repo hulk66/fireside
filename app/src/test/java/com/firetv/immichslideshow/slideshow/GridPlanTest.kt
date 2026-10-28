@@ -7,6 +7,32 @@ import org.junit.Test
 class GridPlanTest {
 
     @Test
+    fun `page size follows the album's shapes`() {
+        // A 4:3 album wants three rows of four on a 16:9 screen.
+        assertEquals(12, GridPlan.slotsFor(List(30) { 1.333f }))
+        // A 3:4 album wants three rows of six or seven.
+        assertEquals(20, GridPlan.slotsFor(List(30) { 0.75f }))
+        // A mix of both lands in between.
+        val mixed = List(15) { 0.75f } + List(15) { 1.333f }
+        assertEquals(15, GridPlan.slotsFor(mixed))
+    }
+
+    @Test
+    fun `page size stays in a sane range`() {
+        assertTrue(GridPlan.slotsFor(emptyList()) in 9..20)
+        assertTrue(GridPlan.slotsFor(List(10) { 0.2f }) in 9..20)
+        assertTrue(GridPlan.slotsFor(List(10) { 8f }) in 9..20)
+        assertTrue(GridPlan.slotsFor(List(10) { Float.NaN }) in 9..20)
+    }
+
+    @Test
+    fun `a sized page uses exactly that many slots`() {
+        assertEquals(12, GridPlan.indicesFor(0, 100, slots = 12).size)
+        assertEquals(20, GridPlan.pageAt(0, 100, slots = 20).tiles.size)
+        assertEquals(24, GridPlan.prefetchIndices(0, 100, slots = 12).size)
+    }
+
+    @Test
     fun `a page is a contiguous window of the album`() {
         val indices = GridPlan.indicesFor(0, 340)
         assertEquals(GridPlan.SLOTS, indices.size)

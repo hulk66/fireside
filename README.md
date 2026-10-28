@@ -130,11 +130,23 @@ Captions are sized relative to the canvas (`height * 0.052`), which is why a
 40 dp thumbnail and a 1080p frame both read correctly from one code path.
 
 The Photo Grid is laid out by `JustifiedGrid`: a dynamic program splits the page
-into rows so that every row is filled edge to edge at a similar height. A row's
-height is fixed by its photos' aspects, so a stack rarely adds up to the frame
-exactly; the finished mosaic is scaled uniformly to cover the frame and centred,
-which crops the surplus at the edges. Cells are never stretched — squeezing the
-rows to fit is what used to bend portrait photos into portrait-shaped holes. `GridPlan` owns the
+into rows so that every row is filled edge to edge at a similar height. Cells are
+never stretched — each one keeps its photo's aspect ratio, so a portrait photo is
+never squeezed into a landscape-shaped hole (that was an early bug: rows used to
+be squashed vertically to meet the frame, which bent every photo by 9 % or more).
+
+How much has to be cropped depends on how many photos are on the wall, and that
+is derived from the album itself: three rows fill a 16:9 frame when the page holds
+`16 / average aspect` photos — twelve for a 4:3 album, twenty for a 3:4 one, about
+fifteen for a mix. `GridPlan.slotsFor` computes it once per album, and the page
+size never changes between pages. Sizing the wall this way is what keeps the crop
+at a fraction of a percent instead of a third of the screen.
+
+Whatever surplus remains is cropped horizontally rather than vertically, because
+the frame is wider than the photos are tall: cropping width takes a slice off a
+landscape photo's long side, while cropping height would eat the short side of the
+photos in the outer rows. Tiles decode square (640 × 640, `Scale.FIT`), so a
+portrait photo keeps its full width at a usable resolution. `GridPlan` owns the
 page clock — twelve photos stay on the wall for 16 s, the tiles flip over once at
 staggered moments, and the prefetch window is exactly two pages.
 
