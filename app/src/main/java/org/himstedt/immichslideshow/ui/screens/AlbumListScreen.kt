@@ -231,7 +231,10 @@ private fun AlbumGrid(
         columns = TvGridCells.Fixed(4),
         modifier = Modifier.fillMaxSize(),
         state = rememberTvLazyGridState(),
-        contentPadding = PaddingValues(bottom = 28.dp),
+        // Headroom for the focus scale: a card grows 4.5 % about its centre, so
+        // in the first row it grows upwards past the grid's own edge and gets
+        // clipped there. The ring needs somewhere to grow into.
+        contentPadding = PaddingValues(top = 12.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(30.dp),
         horizontalArrangement = Arrangement.spacedBy(26.dp),
     ) {
@@ -262,7 +265,9 @@ private fun AlbumCard(
         focusedBorderColor = Palette.Amber,
         contentPadding = PaddingValues(0.dp),
     ) { focused ->
-        Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 14.dp)) {
+        // Inset on all four sides so the focus ring sits in a margin rather than
+        // on the cover's edge.
+        Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 14.dp)) {
             Box(
                 Modifier
                     .fillMaxWidth()

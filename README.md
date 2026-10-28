@@ -222,6 +222,12 @@ the scarce resource. Screens keep their own content scrollable, use compact type
 scales and avoid fixed-height hero blocks; the picker fits a 5 × 2 grid of 16:9
 tiles above a single row of preference chips.
 
+Two things about focus rings, both learned from a ring with no top edge. The ring
+is drawn *over* the content, not under it: a cover image or a theme preview that
+fills the surface otherwise paints the border away. And a focused card scales up
+4.5 % about its centre, so the first row grows past the grid's own edge and is
+clipped there — the grids need top padding to give the ring somewhere to grow.
+
 ## Tests
 
 ```bash

@@ -140,7 +140,6 @@ fun FocusableSurface(
             .shadow(elevation.dp, shape)
             .clip(shape)
             .background(if (focused) focusedColor else containerColor)
-            .border(if (focused) 2.dp else 1.dp, if (focused) focusedBorderColor else borderColor, shape)
             .onFocusChanged { focused = it.isFocused }
             .onKeyEvent { event ->
                 if (RemoteKeys.isConfirmUp(event)) {
@@ -150,10 +149,22 @@ fun FocusableSurface(
                     false
                 }
             }
-            .focusable()
-            .padding(contentPadding),
+            .focusable(),
     ) {
-        content(focused)
+        Box(Modifier.padding(contentPadding)) { content(focused) }
+        // The ring is drawn over the content, not under it. Content that fills
+        // the surface - an album cover, a theme preview - otherwise paints the
+        // border away, and the focus ring loses whichever edge the content
+        // reaches, which for a cover means the top.
+        Box(
+            Modifier
+                .matchParentSize()
+                .border(
+                    width = if (focused) 2.dp else 1.dp,
+                    color = if (focused) focusedBorderColor else borderColor,
+                    shape = shape,
+                ),
+        )
     }
 }
 
