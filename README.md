@@ -17,6 +17,8 @@ full-screen show and the animated thumbnails in the theme picker.
   Reflections, Scrapbook, Origami, Photo Grid.
 - **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
   whole in their original aspect ratio on a dark backdrop.
+- **Reflections** — one big photo on dark glass, with a short soft smear of it
+  underneath rather than a second full-size copy.
 - **Flickr-style Photo Grid** — photos keep their aspect ratio, rows are
   justified edge to edge, and the wall turns over one calm page at a time.
 - **Live theme picker** — every tile is an animated preview rendered by the real

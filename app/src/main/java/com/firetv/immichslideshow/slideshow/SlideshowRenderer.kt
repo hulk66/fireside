@@ -369,60 +369,58 @@ object SlideshowRenderer {
             ),
         )
 
-        val floatY = sin(frame.elapsedMs / 2400f) * 5f
+        val floatY = sin(frame.elapsedMs / 2400f) * 4f
         val cur = frame.bitmaps.full(frame.currentIndex)
         val next = frame.bitmaps.full(frame.nextIndex)
         val p = Easing.easeInOutCubic(frame.transition)
 
-        // Kept clear of the chrome above and the caption band below.
-        val box = Rect(
-            w * 0.22f,
-            h * 0.15f + floatY,
-            w * 0.78f,
-            h * 0.61f + floatY,
-        )
+        // A big frame — the photo is the subject, not a prop. It stops short of
+        // the caption band, which the chrome slides over at the bottom.
+        val box = Rect(w * 0.06f, h * 0.05f + floatY, w * 0.94f, h * 0.70f + floatY)
 
         // Warm glow behind the photo
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x33FFB27A), Color(0x00000000)),
-                center = Offset(w * 0.5f, h * 0.38f),
-                radius = max(w, h) * 0.55f,
+                center = Offset(w * 0.5f, h * 0.36f),
+                radius = max(w, h) * 0.6f,
             ),
-            radius = max(w, h) * 0.55f,
-            center = Offset(w * 0.5f, h * 0.38f),
+            radius = max(w, h) * 0.6f,
+            center = Offset(w * 0.5f, h * 0.36f),
         )
 
         val curRect = cur?.let { fitRect(it, box) }
-        val nextRect = next?.let { fitRect(it, box.translate(Offset(0f, (1f - p) * 24f))) }
+        val nextRect = next?.let { fitRect(it, box.translate(Offset(0f, (1f - p) * 26f))) }
 
         if (curRect != null) drawFloatingPhoto(cur!!, curRect, fit = fit)
         else drawPlaceholder(box)
         if (p > 0f && nextRect != null) drawFloatingPhoto(next!!, nextRect, alpha = p, fit = fit)
 
-        // Mirror below the floating photo
+        // The glass below only carries a short, soft smear of the photo: the
+        // reflection is a hint of depth, not a second picture.
         val anchorRect = curRect ?: nextRect ?: return
-        val gap = h * 0.018f
+        val gap = h * 0.008f
         val reflTop = anchorRect.bottom + gap
-        val reflHeight = anchorRect.height * 0.36f
-        if (reflTop >= h) return
-        val reflRect = Rect(anchorRect.left, reflTop, anchorRect.right, min(h, reflTop + reflHeight))
+        val reflHeight = min(anchorRect.height * 0.17f, h - reflTop)
+        if (reflHeight <= 1f) return
+        val reflRect = Rect(anchorRect.left, reflTop, anchorRect.right, reflTop + reflHeight)
 
         clipRect(reflRect.left, reflRect.top, reflRect.right, reflRect.bottom) {
-            withTransform({ scale(1f, -0.7f, Offset(anchorRect.center.x, reflTop)) }) {
+            withTransform({ scale(1f, -0.45f, Offset(anchorRect.center.x, reflTop)) }) {
                 if (curRect != null && cur != null) {
-                    drawCropped(cur, curRect, 1f, 0.5f, 0.5f, alpha = 0.42f, fit = fit, backdrop = Color.Transparent)
+                    drawCropped(cur, curRect, 1f, 0.5f, 0.5f, alpha = 0.34f, fit = fit, backdrop = Color.Transparent)
                 }
                 if (p > 0f && nextRect != null && next != null) {
-                    drawCropped(next, nextRect, 1f, 0.5f, 0.5f, alpha = 0.42f * p, fit = fit, backdrop = Color.Transparent)
+                    drawCropped(next, nextRect, 1f, 0.5f, 0.5f, alpha = 0.34f * p, fit = fit, backdrop = Color.Transparent)
                 }
             }
+            // Fade out quickly, so the smear never turns into a hard edge.
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color.Transparent,
-                        Color(0xFF06070B).copy(alpha = 0.55f),
-                        Color(0xFF06070B).copy(alpha = 0.97f),
+                        Color(0xFF0A0C12).copy(alpha = 0.30f),
+                        Color(0xFF06070B).copy(alpha = 0.80f),
+                        Color(0xFF020305),
                     ),
                     startY = reflRect.top,
                     endY = reflRect.bottom,
@@ -430,25 +428,13 @@ object SlideshowRenderer {
                 topLeft = reflRect.topLeft,
                 size = reflRect.size,
             )
-            // Ripples
-            val ripples = 7
-            for (i in 0 until ripples) {
-                val ry = reflRect.top + reflRect.height * (i + 1) / (ripples + 1)
-                val wobble = sin(frame.elapsedMs / 900f + i) * 10f
-                drawLine(
-                    color = Color.White.copy(alpha = 0.10f - i * 0.01f),
-                    start = Offset(reflRect.left + wobble, ry),
-                    end = Offset(reflRect.right + wobble, ry),
-                    strokeWidth = 1.2f,
-                )
-            }
         }
-        // Horizon glow
+        // A soft sheen where the photo meets the glass.
         drawLine(
-            color = Color(0xFFFFD9A8).copy(alpha = 0.18f),
+            color = Color(0xFFFFD9A8).copy(alpha = 0.14f),
             start = Offset(anchorRect.left, reflTop),
             end = Offset(anchorRect.right, reflTop),
-            strokeWidth = 2f,
+            strokeWidth = 1.5f,
         )
     }
 
