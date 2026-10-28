@@ -142,6 +142,12 @@ wholly covering older ones. When the pile is full the oldest card slides off the
 bottom. `ScrapbookDesk` owns the pile: which photos are on the desk, which one
 leaves, and each card's scattered placement.
 
+Cards are big (22–40 % of the frame width), vary in size, and are allowed to run
+past the screen edges, so the pile covers the table instead of sitting on it.
+Only the newest three carry a caption — with twenty cards the rest are mostly
+buried. Scrapbook cards are the one place that never needs a full-frame decode,
+so that theme keeps only the tile cache warm.
+
 `GridLayers` turns a page into paint layers so the wall on screen keeps its own
 layout until a tile turns over: a photo on its way out is still drawn in the cell
 the *old* layout gave it, and only the arriving photo takes the new layout's

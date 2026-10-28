@@ -532,7 +532,7 @@ object SlideshowRenderer {
 
         var cardW = w * place.width
         var cardH = cardW * (1.034f / aspect + 0.10f)
-        val maxH = h * 0.42f
+        val maxH = h * 0.62f
         if (cardH > maxH) {
             cardW *= maxH / cardH
             cardH = cardW * (1.034f / aspect + 0.10f)
@@ -542,9 +542,10 @@ object SlideshowRenderer {
         val scale = 0.94f + 0.06f * drop.coerceIn(0f, 1f)
         val halfW = cardW * scale / 2f
         val halfH = cardH * scale / 2f
-        val cx = (w * place.cx).coerceIn(halfW + w * 0.01f, w - halfW - w * 0.01f)
-        val cy = (h * place.cy + lift * h * 0.35f)
-            .coerceIn(halfH + h * 0.02f, h * 0.94f - halfH)
+        // A card may hang over an edge, but never by more than about a quarter
+        // of itself, so nothing is ever half off the screen.
+        val cx = (w * place.cx).coerceIn(halfW * 0.5f, w - halfW * 0.5f)
+        val cy = (h * place.cy + lift * h * 0.35f).coerceIn(halfH * 0.5f, h - halfH * 0.5f)
 
         val cardRect = Rect(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
         // Tiles are plenty for a card this size and keep the full-frame cache free.

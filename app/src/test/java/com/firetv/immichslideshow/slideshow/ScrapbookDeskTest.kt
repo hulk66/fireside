@@ -74,20 +74,41 @@ class ScrapbookDeskTest {
     }
 
     @Test
-    fun `a card never hangs off the desk`() {
+    fun `a card may hang over an edge but never half leave the screen`() {
         val aspects = listOf(0.7f, 1f, 1.5f, 2f)
         for (i in 0 until 200) {
             for (aspect in aspects) {
                 val p = ScrapbookDesk.placement("asset-$i", aspect, frameAspect)
                 val cardAspect = 1.034f / aspect + 0.10f
-                val heightFraction = (p.width * frameAspect * cardAspect).coerceAtMost(0.42f)
-                assertTrue("card $i/$aspect pokes out on the left", p.cx - p.width / 2f > 0f)
-                assertTrue("card $i/$aspect pokes out on the right", p.cx + p.width / 2f < 1f)
-                assertTrue("card $i/$aspect pokes out on top", p.cy - heightFraction / 2f > 0f)
-                assertTrue("card $i/$aspect pokes out at the bottom", p.cy + heightFraction / 2f < 1f)
-                assertTrue("rotation is too steep", kotlin.math.abs(p.rotation) <= 9f)
+                val heightFraction = (p.width * frameAspect * cardAspect).coerceAtMost(0.62f)
+                val visibleW = minOf(p.cx + p.width / 2f, 1f) - maxOf(p.cx - p.width / 2f, 0f)
+                val visibleH = minOf(p.cy + heightFraction / 2f, 1f) - maxOf(p.cy - heightFraction / 2f, 0f)
+                assertTrue("card $i/$aspect is mostly off the left", visibleW / p.width > 0.5f)
+                assertTrue("card $i/$aspect is mostly off the top", visibleH / heightFraction > 0.5f)
+                assertTrue("rotation is too steep", kotlin.math.abs(p.rotation) <= 12f)
             }
         }
+    }
+
+    @Test
+    fun `cards are big and their sizes vary`() {
+        val places = (0 until 60).map { ScrapbookDesk.placement("asset-$it", 1.5f, frameAspect) }
+        places.forEach { assertTrue("card too small: ${it.width}", it.width >= 0.22f) }
+        places.forEach { assertTrue("card too big: ${it.width}", it.width <= 0.40f) }
+        assertTrue("sizes barely vary", places.map { it.width }.distinct().size > 40)
+    }
+
+    @Test
+    fun `big cards do cover most of the desk`() {
+        // Twenty cards of average size must add up to well over the screen area;
+        // overlapping is expected, but the pile should bury the paper.
+        val places = (0 until 20).map { ScrapbookDesk.placement("asset-$it", 1.4f, frameAspect) }
+        val covered = places.sumOf { p ->
+            val cardAspect = 1.034f / 1.4f + 0.10f
+            val heightFraction = (p.width * frameAspect * cardAspect).coerceAtMost(0.62f)
+            (p.width * heightFraction).toDouble()
+        }
+        assertTrue("the pile only covers $covered of the desk", covered > 1.6)
     }
 
     @Test

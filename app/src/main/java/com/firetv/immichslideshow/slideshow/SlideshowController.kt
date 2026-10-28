@@ -33,7 +33,7 @@ class SlideshowController(
     private val scope: CoroutineScope,
     private val decodeSize: IntSize = IntSize(1920, 1080),
     private val tileDecodeSize: IntSize = IntSize(640, 360),
-    private val scrapbookTileSize: IntSize = IntSize(480, 480),
+    private val scrapbookTileSize: IntSize = IntSize(640, 640),
 ) {
 
     private val basePhotos: List<Photo> = photos
@@ -129,9 +129,11 @@ class SlideshowController(
             return
         }
         if (prefs.effect == SlideshowEffect.SCRAPBOOK) {
-            // The desk shows the last five photos; the older cards are only ever
-            // drawn small, so tiles are enough to keep them all on the table.
+            // The desk is the whole picture: twenty cards, none of them ever
+            // drawn full-frame, so tiles alone keep the table stocked and leave
+            // the full-frame cache (and its 8 MB bitmaps) alone.
             for (k in 0 until ScrapbookDesk.CARDS) request(index - k, tile = true)
+            return
         }
         request(index - 1, tile = false)
         request(index, tile = false)

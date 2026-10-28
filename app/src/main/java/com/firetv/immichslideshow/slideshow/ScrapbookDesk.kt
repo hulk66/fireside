@@ -37,24 +37,29 @@ object ScrapbookDesk {
     fun leaving(index: Int, count: Int): Int? =
         if (count > CARDS) Math.floorMod(index - CARDS, count) else null
 
+    /** Cards run past the edges by up to this share of themselves. */
+    private const val BLEED = 0.55f
+
     /**
-     * A stable, scattered place for one photo: wide enough to read, spread over
-     * the whole desk, and never hanging off an edge.
+     * A stable, scattered place for one photo. Cards are big and their sizes
+     * vary, and they are allowed to run past an edge — a pile of snapshots
+     * pushed onto a table, not a contact sheet.
      */
     fun placement(photoId: String, aspect: Float, frameAspect: Float): Placement {
         val seed = photoId.hashCode().toLong()
         val safeAspect = if (aspect.isFinite() && aspect > 0f) aspect.coerceIn(0.7f, 2.0f) else 1.4f
-        val width = Rng.range(seed, 720, 0.155f, 0.265f)
+        val width = Rng.range(seed, 720, 0.22f, 0.40f)
         // Same proportions drawPolaroid uses: 5% mat each side, 13% caption strip.
         val cardAspect = 1.034f / safeAspect + 0.10f
-        val heightFraction = (width * frameAspect * cardAspect).coerceAtMost(0.42f)
+        val heightFraction = (width * frameAspect * cardAspect).coerceAtMost(0.62f)
 
         val halfW = width / 2f
         val halfH = heightFraction / 2f
-        val cx = Rng.range(seed, 700, halfW + 0.025f, 1f - halfW - 0.025f)
-        // Leave the bottom strip clear of the playback chrome.
-        val cy = Rng.range(seed, 710, halfH + 0.035f, 1f - halfH - 0.06f)
-        val rotation = Rng.range(seed, 730, -9f, 9f)
+        // The centre may come inside the card by up to [BLEED] of its half size,
+        // so a card hangs over the edge without ever half-leaving the screen.
+        val cx = Rng.range(seed, 700, halfW * (1f - BLEED), 1f - halfW * (1f - BLEED))
+        val cy = Rng.range(seed, 710, halfH * (1f - BLEED), 1f - halfH * (1f - BLEED))
+        val rotation = Rng.range(seed, 730, -12f, 12f)
         return Placement(cx, cy, width, rotation)
     }
 }
