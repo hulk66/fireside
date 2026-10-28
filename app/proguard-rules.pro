@@ -2,13 +2,13 @@
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
 
--keepclassmembers class com.firetv.immichslideshow.data.** {
+-keepclassmembers class org.himstedt.immichslideshow.data.** {
     *** Companion;
 }
--keepclasseswithmembers class com.firetv.immichslideshow.data.** {
+-keepclasseswithmembers class org.himstedt.immichslideshow.data.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.firetv.immichslideshow.data.**$$serializer { *; }
+-keep,includedescriptorclasses class org.himstedt.immichslideshow.data.**$$serializer { *; }
 
 # Retrofit
 -keepattributes Signature, Exceptions

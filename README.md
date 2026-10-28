@@ -57,7 +57,7 @@ On the TV the app appears in **Your Apps → All Apps** (leanback launcher icon
 and banner are included). To launch it from a shell:
 
 ```bash
-adb shell am start -n com.firetv.immichslideshow/.MainActivity
+adb shell am start -n org.himstedt.immichslideshow/.MainActivity
 ```
 
 ### Running on a TV emulator
@@ -76,7 +76,7 @@ does not have this issue.
 ### Provisioning without typing on a remote
 
 ```bash
-adb shell am start -n com.firetv.immichslideshow/.MainActivity \
+adb shell am start -n org.himstedt.immichslideshow/.MainActivity \
   -e immich_url  "http://192.168.0.10:2283" \
   -e immich_api_key "XXXXXXXXXXXXXXXXXXXXXXXX"
 ```

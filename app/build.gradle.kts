@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.firetv.immichslideshow"
+    namespace = "org.himstedt.immichslideshow"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.firetv.immichslideshow"
+        applicationId = "org.himstedt.immichslideshow"
         minSdk = 23
         targetSdk = 35
         versionCode = 1
