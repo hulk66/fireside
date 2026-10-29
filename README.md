@@ -137,11 +137,17 @@ so the last panel sometimes has to take what is left; a wider pool would give ev
 panel a match, but it would also break the arithmetic that lets any moment be
 computed on its own.
 
-The direction of travel is randomised per step (deterministically, from the cycle
-and step) so a wall does not always slide the same way — but the exchange
-continues the way the cycle's last turn went, because randomising it separately let
-a wall finish sliding one way and then set off the other, which reads as the wall
-bouncing.
+The travel is randomised per step (deterministically, from the cycle and step) so a
+wall does not always slide the same way — but the exchange continues the way the
+cycle's last turn went, because randomising it separately let a wall finish sliding
+one way and then set off the other, which reads as the wall bouncing.
+
+**All four sides are used**, not just left and right: a panel may slide its photo
+out to the left, the right, downwards or upwards, and the incoming photo follows
+from the opposite edge. `Travel` is a unit vector on one axis only — never
+diagonal — so the leaving and arriving photos stay adjacent along that axis and a
+panel never shows a gap; the span travelled is the cell's width when the wall
+slides sideways and its height when it slides up or down.
 
 The exchange slides the two walls past each other, so they are adjacent at every
 instant and the arriving wall's leading edge is visible from the first pixel of the

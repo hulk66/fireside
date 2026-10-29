@@ -26,8 +26,8 @@ data class PanelStep(
     val exchange: Boolean,
     /** How far the slide itself has got, 0..1. Zero through the dwell. */
     val slide: Float,
-    /** +1 when the photos travel right, -1 when they travel left. */
-    val direction: Int,
+    /** Which way this step's photos travel. */
+    val travel: SlidingPanels.Travel,
     /**
      * The photos the wall was *cut* from — the cycle's opening wall. The layout is
      * built from these and never from the current contents, so a panel's cell keeps
@@ -69,6 +69,30 @@ object SlidingPanels {
     /** How long one photo stays up before its panel slides it out. */
     const val STEP_MS = 2_500L
 
+    /**
+     * Which way a step's photos travel, as a unit vector on the frame.
+     *
+     * All four sides are used, so a wall slides left, right, up or down rather
+     * than only sideways. The vector is in *frame* terms — the photos move along
+     * the x axis or the y axis, never diagonally — so the leaving photo and the
+     * arriving one stay adjacent on that axis and a panel never shows a gap.
+     */
+    data class Travel(val dx: Float, val dy: Float) {
+        val horizontal: Boolean get() = dx != 0f
+
+        /** Travel along x is measured in cell widths, along y in cell heights. */
+        fun along(cellWidth: Float, cellHeight: Float): Float =
+            if (horizontal) dx * cellWidth else dy * cellHeight
+    }
+
+    /** The four ways a wall may travel, in a fixed order. */
+    private val TRAVELS = listOf(
+        Travel(1f, 0f),
+        Travel(-1f, 0f),
+        Travel(0f, 1f),
+        Travel(0f, -1f),
+    )
+
     /** Share of a step the slide itself takes; the rest is the photo at rest. */
     private const val SLIDE = 0.45f
 
@@ -104,9 +128,13 @@ object SlidingPanels {
         return 2L * panels
     }
 
-    /** Which way the photos travel on a step: randomised, but the same every run. */
-    fun directionFor(cycle: Long, index: Int): Int =
-        if (Rng.unit(cycle * 31L + index, 7) < 0.5f) 1 else -1
+    /**
+     * Which way the photos travel on a step: randomised, but the same every run.
+     *
+     * All four sides come up, so the theme is not restricted to sideways motion.
+     */
+    fun travelFor(cycle: Long, index: Int): Travel =
+        TRAVELS[(Rng.unit(cycle * 31L + index, 7) * TRAVELS.size).toInt().coerceIn(0, TRAVELS.size - 1)]
 
     /** The wall at [elapsedMs], with [aspects] used to keep each turn a similar shape. */
     fun stepAt(elapsedMs: Long, aspects: List<Float>): PanelStep {
@@ -131,7 +159,7 @@ object SlidingPanels {
         // The exchange continues the way the cycle's last turn went. Randomising it
         // separately let a wall finish sliding one way and then set off the other,
         // which reads as the wall bouncing rather than as one movement.
-        val direction = directionFor(cycle, if (exchange) panels - 1 else index)
+        val travel = travelFor(cycle, if (exchange) panels - 1 else index)
 
         val opening = List(panels) { k -> wrap(base + k, count) }
         val turns = turnsFor(cycle, panels, aspects)
@@ -149,7 +177,7 @@ object SlidingPanels {
                 index = index,
                 exchange = true,
                 slide = slide,
-                direction = direction,
+                travel = travel,
                 opening = opening,
                 before = leaving,
                 photos = leaving,
@@ -166,7 +194,7 @@ object SlidingPanels {
             index = index,
             exchange = false,
             slide = slide,
-            direction = direction,
+            travel = travel,
             opening = opening,
             before = before,
             photos = after,
@@ -243,7 +271,7 @@ object SlidingPanels {
         index = 0,
         exchange = false,
         slide = 0f,
-        direction = 1,
+        travel = Travel(1f, 0f),
         opening = emptyList(),
         before = emptyList(),
         photos = emptyList(),

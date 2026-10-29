@@ -233,24 +233,48 @@ class SlidingPanelsTest {
     }
 
     @Test
-    fun `the direction is a real direction and it varies`() {
-        val directions = (0L..11L).map { SlidingPanels.directionFor(it, 0) }.toSet()
-        assertEquals("both ways should be used", setOf(-1, 1), directions)
-        for (cycle in 0L..5L) {
-            for (index in 0..6) {
-                val direction = SlidingPanels.directionFor(cycle, index)
-                assertTrue("direction out of range: $direction", direction == 1 || direction == -1)
-            }
-        }
+    fun `the wall may slide from all four sides`() {
+        // Sideways only was the bug: the theme could not slide up or down.
+        val travels = (0L..40L).flatMap { cycle ->
+            (0..6).map { index -> SlidingPanels.travelFor(cycle, index) }
+        }.toSet()
+        assertEquals("all four directions should come up", 4, travels.size)
+        assertTrue("no rightward travel", travels.any { it.dx > 0f && it.dy == 0f })
+        assertTrue("no leftward travel", travels.any { it.dx < 0f && it.dy == 0f })
+        assertTrue("no downward travel", travels.any { it.dy > 0f && it.dx == 0f })
+        assertTrue("no upward travel", travels.any { it.dy < 0f && it.dx == 0f })
         // Deterministic, so a preview cannot jitter and a photo cannot jump.
-        assertEquals(SlidingPanels.directionFor(3L, 2), SlidingPanels.directionFor(3L, 2))
+        assertEquals(SlidingPanels.travelFor(3L, 2), SlidingPanels.travelFor(3L, 2))
     }
 
     @Test
-    fun `the exchange runs in the same direction as the single steps`() {
-        for (ms in 0L..120_000L step 500L) {
-            val step = stepAt(ms)
-            assertTrue(step.direction == 1 || step.direction == -1)
+    fun `a travel is a unit vector on one axis`() {
+        // The chase depends on it: the leaving photo and the arriving one have to
+        // move along the same axis, by exactly the panel's span, or a gap opens.
+        for (cycle in 0L..20L) {
+            for (index in 0..6) {
+                val travel = SlidingPanels.travelFor(cycle, index)
+                assertEquals("travel is not a unit vector", 1f, abs(travel.dx) + abs(travel.dy), 1e-6f)
+                assertTrue("travel is diagonal", travel.dx == 0f || travel.dy == 0f)
+                // Measured against a cell: sideways uses its width, up and down its
+                // height, so the span always matches the edge being travelled along.
+                val span = travel.along(400f, 300f)
+                val expected = if (travel.horizontal) 400f else 300f
+                assertEquals("span does not match the axis", expected, abs(span), 1e-3f)
+            }
+        }
+    }
+
+    @Test
+    fun `the exchange runs the way the cycle's last turn went`() {
+        // Randomising the exchange separately let a wall finish sliding one way and
+        // then set off the other, which reads as the wall bouncing.
+        for (cycle in 0L..6L) {
+            val panels = SlidingPanels.panelsFor(cycle)
+            val steps = stepsOf(cycle)
+            val exchange = steps.last()
+            val lastTurn = steps[panels - 1]
+            assertEquals("the exchange set off another way", lastTurn.travel, exchange.travel)
         }
     }
 

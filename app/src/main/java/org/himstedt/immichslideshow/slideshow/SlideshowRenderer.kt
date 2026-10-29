@@ -702,7 +702,7 @@ object SlideshowRenderer {
             // property of the cycle, not of what happens to be sliding through it.
             val leavingCells = justifiedCells(frame, step.opening, w, h, gap)
             val arrivingCells = justifiedCells(frame, step.arrivingPhotos, w, h, gap)
-            withTransform({ translate(step.direction * p * w, 0f) }) {
+            withTransform({ translate(step.travel.dx * p * w, step.travel.dy * p * h) }) {
                 step.before.forEachIndexed { slot, photo ->
                     drawGridTile(frame.bitmaps.tile(photo), leavingCells.getOrNull(slot), 1f)
                 }
@@ -711,7 +711,9 @@ object SlideshowRenderer {
             // wall sits exactly one frame-width away, so drawing it is pointless at
             // best and a one-pixel seam of the next wall at worst.
             if (p > 0.002f) {
-                withTransform({ translate(step.direction * (p - 1f) * w, 0f) }) {
+                withTransform({
+                    translate(step.travel.dx * (p - 1f) * w, step.travel.dy * (p - 1f) * h)
+                }) {
                     step.arrivingPhotos.forEachIndexed { slot, photo ->
                         drawGridTile(frame.bitmaps.tile(photo), arrivingCells.getOrNull(slot), 1f)
                     }
@@ -735,14 +737,18 @@ object SlideshowRenderer {
                 return@forEachIndexed
             }
             // One panel's worth of chase: the leaving photo moves out by exactly
-            // the width the arriving one has to cover, so they stay edge to edge
-            // and the panel never shows a gap.
-            val travel = step.direction * p * cell.width
+            // the span the arriving one has to cover, so they stay edge to edge and
+            // the panel never shows a gap. The span is the cell's width when the
+            // wall slides sideways and its height when it slides up or down.
+            // Only one axis is ever non-zero, so the same pair of offsets works for
+            // a sideways slide and an up-and-down one.
+            val spanX = step.travel.dx * cell.width
+            val spanY = step.travel.dy * cell.height
             clipRect(cell.left, cell.top, cell.right, cell.bottom) {
-                withTransform({ translate(travel, 0f) }) {
+                withTransform({ translate(spanX * p, spanY * p) }) {
                     drawGridTile(frame.bitmaps.tile(fromPhoto), cell, 1f)
                 }
-                withTransform({ translate(travel - step.direction * cell.width, 0f) }) {
+                withTransform({ translate(spanX * (p - 1f), spanY * (p - 1f)) }) {
                     drawGridTile(frame.bitmaps.tile(toPhoto), cell, 1f)
                 }
             }
