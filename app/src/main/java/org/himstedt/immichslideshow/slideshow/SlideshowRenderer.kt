@@ -1395,31 +1395,25 @@ object SlideshowRenderer {
             return
         }
 
-        val z = zoom.coerceAtLeast(1f)
-        val dstAspect = dst.width / dst.height
-        val imgAspect = imgW / imgH
-
-        var srcW: Float
-        var srcH: Float
-        if (imgAspect > dstAspect) {
-            srcH = imgH / z
-            srcW = srcH * dstAspect
-        } else {
-            srcW = imgW / z
-            srcH = srcW / dstAspect
-        }
-        srcW = srcW.coerceAtMost(imgW)
-        srcH = srcH.coerceAtMost(imgH)
-
-        val cx = focusX.coerceIn(0f, 1f) * imgW
-        val cy = focusY.coerceIn(0f, 1f) * imgH
-        val left = (cx - srcW / 2f).coerceIn(0f, (imgW - srcW).coerceAtLeast(0f))
-        val top = (cy - srcH / 2f).coerceIn(0f, (imgH - srcH).coerceAtLeast(0f))
+        // The crop is centred on the photo: a portrait in a landscape slot has to
+        // lose something, but it loses the same from both sides, so the subject
+        // stays in the panel. CropMath holds that rule and is unit tested.
+        val crop = CropMath.sourceRect(
+            imgW = imgW,
+            imgH = imgH,
+            dstAspect = dst.width / dst.height,
+            zoom = zoom,
+            focusX = focusX,
+            focusY = focusY,
+        )
 
         drawImage(
             image = img,
-            srcOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-            srcSize = IntSize(srcW.roundToInt().coerceAtLeast(1), srcH.roundToInt().coerceAtLeast(1)),
+            srcOffset = IntOffset(crop.left.roundToInt(), crop.top.roundToInt()),
+            srcSize = IntSize(
+                crop.width.roundToInt().coerceAtLeast(1),
+                crop.height.roundToInt().coerceAtLeast(1),
+            ),
             dstOffset = IntOffset(dst.left.roundToInt(), dst.top.roundToInt()),
             dstSize = IntSize(dst.width.roundToInt().coerceAtLeast(1), dst.height.roundToInt().coerceAtLeast(1)),
             alpha = alpha.coerceIn(0f, 1f),

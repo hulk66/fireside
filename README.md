@@ -122,6 +122,13 @@ opens with the first *n* photos, each panel's turn brings in the photo *n* place
 further on, and the exchange brings in the next cycle's opening photos. So every
 photo is shown exactly once per pass through the album.
 
+Photos are **cropped to fill** their panel, and the crop is **centred**: a portrait
+in a landscape cell has to lose something, but it loses the same amount from both
+sides, so the subject stays in the panel instead of drifting out of it. `CropMath`
+holds that rule as pure arithmetic and is unit tested — centred by default, never
+running past the photo's edge, always the slot's shape, and clamped (not
+extrapolated) when a focus point is asked for.
+
 The layout is cut **once per cycle**, from that cycle's opening photos — never from
 the current contents. That distinction is the whole point: cutting from the current
 photos re-arranged the entire wall every time a single panel slid, which made a
