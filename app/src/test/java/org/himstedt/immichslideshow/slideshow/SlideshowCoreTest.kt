@@ -382,10 +382,15 @@ class RngTest {
 class SlideshowEffectTest {
 
     @Test
-    fun `ten themes ship in the classic order`() {
-        assertEquals(10, SlideshowEffect.entries.size)
+    fun `the themes ship in the classic order`() {
+        assertEquals(11, SlideshowEffect.entries.size)
         assertEquals(SlideshowEffect.CLASSIC, SlideshowEffect.entries.first())
         assertEquals(SlideshowEffect.PHOTO_GRID, SlideshowEffect.entries.last())
+        // The print theme belongs with the other paper themes, not after the walls.
+        assertEquals(
+            SlideshowEffect.SCRAPBOOK.ordinal + 1,
+            SlideshowEffect.VINTAGE_PRINTS.ordinal,
+        )
     }
 
     @Test
@@ -426,7 +431,12 @@ class SlideshowEffectTest {
     }
 
     @Test
-    fun `every number key maps to a theme`() {
-        assertEquals(10, SlideshowEffect.ordered.size)
+    fun `the number keys cover the first ten themes`() {
+        // Digits 1..0 map to the first ten themes, so the eleventh is reached from
+        // the picker. What matters is that no two keys land on the same theme and
+        // that the ten they do cover are distinct.
+        assertEquals(10, SlideshowEffect.ordered.take(10).toSet().size)
+        assertEquals(11, SlideshowEffect.ordered.size)
+        assertEquals(SlideshowEffect.ordered, SlideshowEffect.entries.toList())
     }
 }

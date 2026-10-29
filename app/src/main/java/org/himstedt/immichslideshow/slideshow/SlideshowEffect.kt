@@ -54,6 +54,13 @@ enum class SlideshowEffect(
         tagline = "Polaroids settle onto a paper desk",
         transitionFraction = 0.26f,
     ),
+    VINTAGE_PRINTS(
+        title = "Vintage Prints",
+        tagline = "One print on a pile of others, under glass",
+        // A second of dissolve on an eight second hold: long enough to read as a
+        // wash rather than as a cut, short enough not to feel stalled.
+        transitionFraction = 0.125f,
+    ),
     ORIGAMI(
         title = "Origami",
         tagline = "A wall of photos turns over like sheets of paper",

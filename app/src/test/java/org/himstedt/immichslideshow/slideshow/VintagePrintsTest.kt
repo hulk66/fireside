@@ -1,0 +1,255 @@
+package org.himstedt.immichslideshow.slideshow
+
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The print layout is arithmetic, so it is tested as arithmetic: that the front
+ * print always fits the frame, that its border is even and its photo uncropped,
+ * that the scatter behind it actually covers the stage, and that the drift is a
+ * creep rather than a bob.
+ */
+class VintagePrintsTest {
+
+    private val w = 1920f
+    private val h = 1080f
+    private val aspects = listOf(1.5f, 0.66f, 1.78f, 1.0f, 0.5f, 2.4f, 1.33f)
+
+    private fun seeds() = (0..5).map { it * 7919L + 13L }
+
+    // ------------------------------------------------------------- front print
+
+    @Test
+    fun `the front print keeps the photo's shape inside an even border`() {
+        for (aspect in listOf(0.3f, 0.5f, 0.66f, 1f, 1.5f, 1.78f, 2.4f, 3.6f)) {
+            for (seed in seeds()) {
+                val print = VintagePrints.front(0, aspect, w, h, seed)
+                val inner = print.photoWidth / print.photoHeight
+                assertEquals("border changed the photo's shape at $aspect", aspect, inner, 0.02f)
+                // Even on all four sides, and the same share of the width.
+                assertEquals(print.margin, print.photoLeft - (print.centerX - print.width / 2f), 0.5f)
+                assertEquals(print.margin, print.photoTop - (print.centerY - print.height / 2f), 0.5f)
+                assertEquals(print.margin, VintagePrints.MARGIN * print.width, 0.5f)
+            }
+        }
+    }
+
+    @Test
+    fun `the whole front print always fits the frame`() {
+        // The print is tilted, so the corners of the *rotated* box are what has to
+        // fit - a print hanging off the edge would be a bug, not a pile.
+        for (aspect in listOf(0.3f, 0.5f, 0.66f, 1f, 1.5f, 1.78f, 2.4f, 3.6f)) {
+            for (seed in seeds()) {
+                val print = VintagePrints.front(0, aspect, w, h, seed)
+                assertTrue(
+                    "left edge at ${print.centerX - print.halfWidth}",
+                    print.centerX - print.halfWidth >= -0.5f,
+                )
+                assertTrue(
+                    "right edge at ${print.centerX + print.halfWidth}",
+                    print.centerX + print.halfWidth <= w + 0.5f,
+                )
+                assertTrue(
+                    "top edge at ${print.centerY - print.halfHeight}",
+                    print.centerY - print.halfHeight >= -0.5f,
+                )
+                assertTrue(
+                    "bottom edge at ${print.centerY + print.halfHeight}",
+                    print.centerY + print.halfHeight <= h + 0.5f,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the front print is the subject, not a thumbnail`() {
+        // Filling most of the frame is the whole look: a print adrift in the middle
+        // of a large stage reads as a broken layout.
+        for (aspect in listOf(0.5f, 0.66f, 1f, 1.5f, 1.78f, 2.4f)) {
+            for (seed in seeds()) {
+                val print = VintagePrints.front(0, aspect, w, h, seed)
+                val share = maxOf(print.photoHeight / h, print.photoWidth / w)
+                assertTrue("$aspect only fills ${(share * 100).toInt()}%", share > 0.58f)
+                // ...and it must leave room to be placed somewhere else on the
+                // next step, or every print lands on top of the last one.
+                assertTrue(
+                    "$aspect leaves no room to move",
+                    w - print.halfWidth * 2f > w * 0.18f || h - print.halfHeight * 2f > h * 0.18f,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the front print is tilted only slightly, and differently per photo`() {
+        val angles = mutableSetOf<Int>()
+        for (seed in seeds()) {
+            val print = VintagePrints.front(0, 1.5f, w, h, seed)
+            assertTrue("tilt ${print.angleDeg}", abs(print.angleDeg) <= VintagePrints.FRONT_TILT)
+            angles.add((print.angleDeg * 10f).toInt())
+        }
+        assertTrue("every photo got the same tilt", angles.size > 2)
+    }
+
+    @Test
+    fun `the front print is placed the same way twice`() {
+        // Determinism matters twice over: a preview must not jitter on every
+        // recomposition, and a photo must not jump when the show is restarted.
+        for (seed in seeds()) {
+            val a = VintagePrints.front(3, 1.4f, w, h, seed)
+            val b = VintagePrints.front(3, 1.4f, w, h, seed)
+            assertEquals(a, b)
+        }
+        assertNotEquals(
+            VintagePrints.front(0, 1.4f, w, h, 1L),
+            VintagePrints.front(0, 1.4f, w, h, 2L),
+        )
+    }
+
+    // ----------------------------------------------------------------- scatter
+
+    @Test
+    fun `the scatter covers the stage`() {
+        // A bare patch behind the front print is the one thing this theme cannot
+        // have: the pile is the background, so gaps read as a broken render.
+        for (seed in seeds()) {
+            val prints = (0 until VintagePrints.BACKDROP).map { slot ->
+                VintagePrints.backdrop(slot, aspects[slot % aspects.size], w, h, seed, slot)
+            }
+            var covered = 0
+            var total = 0
+            val cols = 48
+            val rows = 27
+            for (r in 0 until rows) {
+                for (c in 0 until cols) {
+                    val x = (c + 0.5f) / cols * w
+                    val y = (r + 0.5f) / rows * h
+                    total++
+                    if (prints.any { contains(it, x, y) }) covered++
+                }
+            }
+            val share = covered.toFloat() / total
+            assertTrue("scatter leaves ${((1f - share) * 100).toInt()}% bare", share > 0.90f)
+        }
+    }
+
+    @Test
+    fun `the scatter keeps its photos' shapes and may hang off the frame`() {
+        for (seed in seeds()) {
+            for (slot in 0 until VintagePrints.BACKDROP) {
+                val aspect = aspects[slot % aspects.size]
+                val print = VintagePrints.backdrop(slot, aspect, w, h, seed, slot)
+                assertEquals(
+                    "scatter print $slot was stretched",
+                    aspect,
+                    print.photoWidth / print.photoHeight,
+                    0.05f,
+                )
+                assertTrue(
+                    "scatter tilt ${print.angleDeg}",
+                    abs(print.angleDeg) <= VintagePrints.BACK_TILT,
+                )
+                // Big enough to be part of a pile rather than a stamp.
+                assertTrue("scatter print $slot is tiny", print.photoHeight > h * 0.35f)
+            }
+        }
+    }
+
+    @Test
+    fun `the scatter is re-dealt from one photo to the next`() {
+        // Every step re-deals the pile: same slot, different photo, different
+        // arrangement.
+        val first = (0 until VintagePrints.BACKDROP).map {
+            VintagePrints.backdrop(it, 1.4f, w, h, seed = 100L, slot = it)
+        }
+        val second = (0 until VintagePrints.BACKDROP).map {
+            VintagePrints.backdrop(it, 1.4f, w, h, seed = 200L, slot = it)
+        }
+        assertNotEquals(first, second)
+    }
+
+    // ------------------------------------------------------------------- blend
+
+    @Test
+    fun `the arriving print leads the one it replaces`() {
+        // The reference does not dissolve evenly: the incoming print is already
+        // opaque in places while the outgoing one is still a bright ghost.
+        val start = VintagePrints.blend(0f)
+        assertEquals(1f, start.outgoing, 0.001f)
+        assertEquals(0f, start.incoming, 0.001f)
+        assertEquals(0f, start.wash, 0.001f)
+
+        val end = VintagePrints.blend(1f)
+        assertEquals(0f, end.outgoing, 0.001f)
+        assertEquals(1f, end.incoming, 0.001f)
+
+        var previousIncoming = 0f
+        var previousOutgoing = 1f
+        for (i in 1..40) {
+            val blend = VintagePrints.blend(i / 40f)
+            assertTrue("incoming went backwards at $i", blend.incoming >= previousIncoming - 1e-4f)
+            assertTrue("outgoing rose at $i", blend.outgoing <= previousOutgoing + 1e-4f)
+            assertTrue("wash out of range at $i", blend.wash in 0f..0.8f)
+            assertTrue("incoming out of range at $i", blend.incoming in 0f..1f)
+            previousIncoming = blend.incoming
+            previousOutgoing = blend.outgoing
+        }
+
+        // Leading means arriving early, not arriving first: at the moment the new
+        // print is fully in, the old one is still on screen as a washed ghost. A
+        // plain dissolve would not be finished with the old one until the end.
+        val handover = (1..200).map { it / 200f }.first { VintagePrints.blend(it).incoming >= 0.999f }
+        val at = VintagePrints.blend(handover)
+        assertTrue("the new print only arrives at $handover", handover < 0.85f)
+        // Still at full strength and visibly bleached: a photograph going white,
+        // not a ghost fading into the dark stage.
+        assertTrue("the outgoing print has faded too far: ${at.outgoing}", at.outgoing > 0.6f)
+        assertTrue("the outgoing print is not washed: ${at.wash}", at.wash > 0.3f)
+    }
+
+    // ------------------------------------------------------------------- drift
+
+    @Test
+    fun `the drift is a creep, not a bob`() {
+        // The reference drifts, so this theme drifts too - but a drift whose period
+        // approaches a slide's length is a shake, and a shake reads as a rendering
+        // fault. One second of drift must stay far below a pixel.
+        var previous = VintagePrints.drift(0L)
+        for (ms in 1_000L..180_000L step 1_000L) {
+            val now = VintagePrints.drift(ms)
+            assertTrue("scale jumped", abs(now.scale - previous.scale) < 0.002f)
+            assertTrue("drift jumped sideways", abs(now.dx - previous.dx) < 0.002f)
+            assertTrue("drift jumped vertically", abs(now.dy - previous.dy) < 0.002f)
+            assertTrue("scale out of range: ${now.scale}", now.scale in 0.98f..1.02f)
+            assertTrue("offset out of range: ${now.dx}", abs(now.dx) < 0.01f)
+            assertTrue("offset out of range: ${now.dy}", abs(now.dy) < 0.01f)
+            previous = now
+        }
+    }
+
+    @Test
+    fun `the drift keeps moving and never repeats inside a slide`() {
+        // A still composition would defeat the point; a repeating one inside a
+        // single hold would look like a loop.
+        val start = VintagePrints.drift(0L)
+        val middle = VintagePrints.drift(4_000L)
+        val later = VintagePrints.drift(8_000L)
+        assertNotEquals(start, middle)
+        assertNotEquals(middle, later)
+    }
+
+    /** Is (x, y) inside this tilted print? */
+    private fun contains(print: VintagePrints.Print, x: Float, y: Float): Boolean {
+        val rad = Math.toRadians(print.angleDeg.toDouble())
+        val dx = x - print.centerX
+        val dy = y - print.centerY
+        val localX = dx * cos(rad).toFloat() + dy * sin(rad).toFloat()
+        val localY = -dx * sin(rad).toFloat() + dy * cos(rad).toFloat()
+        return abs(localX) <= print.width / 2f && abs(localY) <= print.height / 2f
+    }
+}

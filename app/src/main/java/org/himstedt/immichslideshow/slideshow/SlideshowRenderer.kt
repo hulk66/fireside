@@ -7,10 +7,13 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -54,6 +57,7 @@ object SlideshowRenderer {
             SlideshowEffect.SHIFTING_TILES -> drawShiftingTiles(frame)
             SlideshowEffect.REFLECTIONS -> drawReflections(frame, textMeasurer)
             SlideshowEffect.SCRAPBOOK -> drawScrapbook(frame, textMeasurer)
+            SlideshowEffect.VINTAGE_PRINTS -> drawVintagePrints(frame)
             SlideshowEffect.ORIGAMI -> drawOrigami(frame)
             SlideshowEffect.PHOTO_GRID -> drawPhotoGrid(frame)
         }
@@ -65,7 +69,8 @@ object SlideshowRenderer {
         // The two walls fill the frame on purpose; a caption would sit on a photo.
         if (frame.effect != SlideshowEffect.SCRAPBOOK &&
             frame.effect != SlideshowEffect.PHOTO_GRID &&
-            frame.effect != SlideshowEffect.ORIGAMI
+            frame.effect != SlideshowEffect.ORIGAMI &&
+            frame.effect != SlideshowEffect.VINTAGE_PRINTS
         ) {
             drawCaption(
                 frame = frame,
@@ -660,6 +665,237 @@ object SlideshowRenderer {
             val tapeAlpha = if (arriving) ((settle - 0.85f) / 0.15f).coerceIn(0f, 1f) else alpha
             if (tapeAlpha > 0.02f) drawTape(cardRect, rotation, tapeAlpha)
         }
+    }
+
+    /**
+     * Vintage Prints: one print lying on top of a pile of others, under glass.
+     *
+     * The pile is the album's other photos, desaturated and sunk into shadow, and
+     * it re-deals itself on every step — the scatter behind the front print is
+     * never the same twice. The front print keeps its photo's own shape, so the
+     * border is even on all four sides and the whole photo shows; its size, tilt
+     * and position are randomised per photo, which is what stops the theme from
+     * reading as a fixed frame with pictures swapped inside it.
+     *
+     * The cross-fade is not a plain dissolve: the arriving print leads, already
+     * opaque in places while the one it replaces is still a bright ghost, because
+     * the outgoing print washes out into light rather than simply fading away.
+     */
+    private fun DrawScope.drawVintagePrints(frame: SlideshowFrame) {
+        val w = size.width
+        val h = size.height
+        // Warm near-black: the stage is the shadow between sheets, not a colour.
+        drawRect(Color(0xFF15120E))
+
+        val blend = VintagePrints.blend(frame.transition)
+        val drift = VintagePrints.drift(frame.elapsedMs)
+        withTransform({
+            scale(drift.scale, drift.scale, Offset(w / 2f, h / 2f))
+            translate(drift.dx * w, drift.dy * h)
+        }) {
+            // The incoming pile fades in over the outgoing one, so the scatter
+            // re-deals without either layer ever being half-drawn.
+            drawPrintScatter(frame, frame.currentIndex, w, h, 1f)
+            if (blend.incoming > 0.01f) {
+                drawPrintScatter(frame, frame.nextIndex, w, h, blend.incoming)
+            }
+            if (blend.outgoing > 0.01f) {
+                drawFrontPrint(frame, frame.currentIndex, w, h, blend.outgoing, blend.wash)
+            }
+            if (blend.incoming > 0.01f) {
+                drawFrontPrint(frame, frame.nextIndex, w, h, blend.incoming, 0f)
+            }
+        }
+        // Glass and grain are fixed to the lens: the composition drifts
+        // underneath them, which is what makes them read as reflection rather
+        // than as paint on the prints.
+        drawGlassStreaks(w, h)
+        drawFilmGrain(w, h)
+    }
+
+    /** The pile behind the front print: the album's other photos, sunk in shadow. */
+    private fun DrawScope.drawPrintScatter(
+        frame: SlideshowFrame,
+        index: Int,
+        w: Float,
+        h: Float,
+        alpha: Float,
+    ) {
+        if (frame.count <= 0) return
+        val seed = frame.photos.getOrNull(index)?.id?.hashCode()?.toLong() ?: 0L
+        for (slot in 0 until VintagePrints.BACKDROP) {
+            val photoIndex = Math.floorMod(index + 1L + slot, frame.count.toLong()).toInt()
+            val photo = frame.photos.getOrNull(photoIndex) ?: continue
+            val bitmap = frame.bitmaps.tile(photoIndex) ?: continue
+            val print = VintagePrints.backdrop(photoIndex, photo.aspectRatio ?: 1.5f, w, h, seed, slot)
+            val left = print.centerX - print.width / 2f
+            val top = print.centerY - print.height / 2f
+            withTransform({ rotate(print.angleDeg, Offset(print.centerX, print.centerY)) }) {
+                // A thin dim edge is what makes a rectangle read as a print
+                // rather than as a crop of something larger.
+                drawRect(
+                    color = Color(0xFF2C2822).copy(alpha = alpha),
+                    topLeft = Offset(left, top),
+                    size = Size(print.width, print.height),
+                )
+                drawPrintPhoto(bitmap, print, alpha, GREY_FILTER)
+                // Sink it into the shadow: the pile is dark so that the print on
+                // top is the one the light is on.
+                drawRect(
+                    color = Color(0xFF0B0906).copy(alpha = 0.28f * alpha),
+                    topLeft = Offset(print.photoLeft, print.photoTop),
+                    size = Size(print.photoWidth, print.photoHeight),
+                )
+            }
+        }
+    }
+
+    /** The print in front: paper, border, whole photo, and a soft shadow. */
+    private fun DrawScope.drawFrontPrint(
+        frame: SlideshowFrame,
+        index: Int,
+        w: Float,
+        h: Float,
+        alpha: Float,
+        wash: Float,
+    ) {
+        val photo = frame.photos.getOrNull(index) ?: return
+        val bitmap = frame.bitmaps.full(index) ?: return
+        val seed = photo.id?.hashCode()?.toLong() ?: 0L
+        val print = VintagePrints.front(index, photo.aspectRatio ?: 1.5f, w, h, seed)
+        val left = print.centerX - print.width / 2f
+        val top = print.centerY - print.height / 2f
+        withTransform({ rotate(print.angleDeg, Offset(print.centerX, print.centerY)) }) {
+            // Layered shadow, offset down as if the light were above the pile.
+            for (i in 3 downTo 1) {
+                val grow = i * 7f
+                drawRect(
+                    color = Color.Black.copy(alpha = 0.16f * alpha),
+                    topLeft = Offset(left - grow, top + grow * 1.5f),
+                    size = Size(print.width + grow * 2f, print.height + grow * 2f),
+                )
+            }
+            drawRect(
+                color = Color(0xFFEDE8DF).copy(alpha = alpha),
+                topLeft = Offset(left, top),
+                size = Size(print.width, print.height),
+            )
+            // The print takes the photo's shape, so this is the whole photo with
+            // no crop and no bars - "fit" and "fill" are the same rect here.
+            drawPrintPhoto(bitmap, print, alpha, null)
+            if (wash > 0.001f) {
+                drawRect(
+                    color = Color(0xFFFBF6EC).copy(alpha = (wash * alpha).coerceIn(0f, 1f)),
+                    topLeft = Offset(print.photoLeft, print.photoTop),
+                    size = Size(print.photoWidth, print.photoHeight),
+                )
+            }
+        }
+    }
+
+    /** Draws one print's photo into its own rect, optionally desaturated. */
+    private fun DrawScope.drawPrintPhoto(
+        bitmap: ImageBitmap,
+        print: VintagePrints.Print,
+        alpha: Float,
+        colorFilter: ColorFilter?,
+    ) {
+        val dstW = print.photoWidth.roundToInt().coerceAtLeast(1)
+        val dstH = print.photoHeight.roundToInt().coerceAtLeast(1)
+        drawImage(
+            image = bitmap,
+            srcOffset = IntOffset.Zero,
+            srcSize = IntSize(bitmap.width, bitmap.height),
+            dstOffset = IntOffset(print.photoLeft.roundToInt(), print.photoTop.roundToInt()),
+            dstSize = IntSize(dstW, dstH),
+            alpha = alpha.coerceIn(0f, 1f),
+            filterQuality = FilterQuality.Low,
+            colorFilter = colorFilter,
+        )
+    }
+
+    /** Two soft bands of light lying across the glass. */
+    private fun DrawScope.drawGlassStreaks(w: Float, h: Float) {
+        val bands = listOf(
+            floatArrayOf(16f, 0.20f, 0.055f, 0.44f),
+            floatArrayOf(-21f, 0.66f, 0.035f, 0.32f),
+            floatArrayOf(7f, 0.90f, 0.040f, 0.24f),
+        )
+        for (band in bands) {
+            val angle = band[0]
+            val center = band[1] * w
+            val alpha = band[2]
+            val span = band[3] * w
+            withTransform({ rotate(angle, Offset(w / 2f, h / 2f)) }) {
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFFFF6E8).copy(alpha = alpha),
+                            Color.Transparent,
+                        ),
+                        startX = center - span / 2f,
+                        endX = center + span / 2f,
+                    ),
+                    topLeft = Offset(center - span / 2f, -h),
+                    size = Size(span, h * 3f),
+                )
+            }
+        }
+    }
+
+    /**
+     * A film-grain plate over everything.
+     *
+     * One cached noise bitmap, tiled four times at twice its size with nearest
+     * filtering: four draws a frame is cheap enough for the Fire TV, and at this
+     * alpha the grain reads as film rather than as noise.
+     */
+    private fun DrawScope.drawFilmGrain(w: Float, h: Float) {
+        val noise = grainPlate
+        val tileW = (w / 2f).roundToInt().coerceAtLeast(1)
+        val tileH = (h / 2f).roundToInt().coerceAtLeast(1)
+        var y = 0
+        while (y < h.toInt()) {
+            var x = 0
+            while (x < w.toInt()) {
+                drawImage(
+                    image = noise,
+                    srcOffset = IntOffset.Zero,
+                    srcSize = IntSize(noise.width, noise.height),
+                    dstOffset = IntOffset(x, y),
+                    dstSize = IntSize(tileW + 1, tileH + 1),
+                    alpha = 0.06f,
+                    filterQuality = FilterQuality.None,
+                )
+                x += tileW
+            }
+            y += tileH
+        }
+    }
+
+    /** Desaturated, the way the pile behind the front print is printed. */
+    private val GREY_FILTER: ColorFilter =
+        ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.12f) })
+
+    /** The grain plate, built once and reused: noise is expensive to make. */
+    private val grainPlate: ImageBitmap by lazy {
+        val n = 512
+        val bitmap = android.graphics.Bitmap.createBitmap(n, n, android.graphics.Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(n * n)
+        var state = 0x2545F4914F6CDD1DL
+        for (i in pixels.indices) {
+            state = Rng.splitMix64(state)
+            val v = ((state ushr 33).toInt() and 0xFF)
+            // Both directions: film grain is specks of shadow and specks of light.
+            pixels[i] = if (v < 128) {
+                (((128 - v) * 2) shl 24)
+            } else {
+                (((v - 128) * 2) shl 24) or 0xFFFFFF
+            }
+        }
+        bitmap.setPixels(pixels, 0, n, 0, 0, n, n)
+        bitmap.asImageBitmap()
     }
 
     /**

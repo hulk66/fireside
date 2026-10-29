@@ -153,6 +153,18 @@ class SlideshowController(
             for (i in indices) request(i, tile = true)
             return
         }
+        if (prefs.effect == SlideshowEffect.VINTAGE_PRINTS) {
+            // The print itself and the one arriving need full frames; the pile
+            // behind them is drawn from tiles, and it is the album's next few
+            // photos - one more than the scatter holds, because the incoming
+            // pile starts one photo further along.
+            request(index - 1, tile = false)
+            request(index, tile = false)
+            request(index + 1, tile = false)
+            if (transition > 0f) request(index + 2, tile = false)
+            for (k in 1..VintagePrints.BACKDROP + 1) request(index + k, tile = true)
+            return
+        }
         if (prefs.effect == SlideshowEffect.SCRAPBOOK) {
             // The desk is the whole picture: twenty cards, none of them ever
             // drawn full-frame, so tiles alone keep the table stocked and leave

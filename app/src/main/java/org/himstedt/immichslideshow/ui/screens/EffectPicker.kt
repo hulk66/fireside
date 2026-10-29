@@ -117,7 +117,9 @@ fun EffectPickerOverlay(
             Spacer(Modifier.height(18.dp))
 
             TvLazyVerticalGrid(
-                columns = TvGridCells.Fixed(5),
+                // Five across for the classic ten; the eleventh theme would
+                // otherwise sit alone on a third row.
+                columns = TvGridCells.Fixed(if (SlideshowEffect.entries.size <= 10) 5 else 6),
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = rememberTvLazyGridState(),
                 contentPadding = PaddingValues(bottom = 10.dp),

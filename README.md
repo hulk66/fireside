@@ -13,8 +13,8 @@ full-screen show and the animated thumbnails in the theme picker.
 ## Features
 
 - **Album browser** — covers, photo counts and dates straight from Immich.
-- **Ten themes** — Classic, Ken Burns, Slide, Flip, Fold, Shifting Tiles,
-  Reflections, Scrapbook, Origami, Photo Grid.
+- **Eleven themes** — Classic, Ken Burns, Slide, Flip, Fold, Shifting Tiles,
+  Reflections, Scrapbook, Vintage Prints, Origami, Photo Grid.
 - **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
   whole in their original aspect ratio on a dark backdrop.
 - **Reflections** — a bright stage where most steps are a collage (a tall column
@@ -92,7 +92,7 @@ with or without a scheme or a trailing `/api`.
 | ▲ ▼ ◀ ▶ | move focus / previous-next photo while playing |
 | OK / Enter / Space | select, apply, pause & resume |
 | MENU | open the theme picker while playing |
-| 1 – 0 | jump straight to theme 1…10 |
+| 1 – 0 | jump straight to themes 1…10 (the eleventh is in the picker) |
 | BACK | close the picker / leave the album / exit |
 
 Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`,
@@ -103,6 +103,36 @@ Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`
 each photo to fill the screen, on shows the whole frame with bars. The two walls
 — Photo Grid and Origami — keep filling regardless: they are mosaics of crops,
 and letterboxing every tile would fill the wall with bars.
+
+### Vintage Prints
+
+One large print lying on a pile of others, under glass.
+
+The pile is the album's own photos, desaturated and sunk into shadow, laid on a
+jittered grid so it covers the stage — a bare patch of stage behind the front
+print is the one thing this theme cannot have, because the pile *is* the
+background. It re-deals itself on every step, so the scatter is never the same
+twice.
+
+The front print takes its photo's own shape, so the border is even on all four
+sides and the whole photo shows — `Fit` and `Fill` are the same rect here, which
+is why the theme ignores that preference. Its size, tilt and position are
+randomised per photo, deliberately short of the largest print that would fit: a
+print that fills the frame has nowhere to move, so every step lands on top of the
+last one and the dissolve reads as a translucent overlay instead of as a new
+print placed on the pile.
+
+The cross-fade is not a plain dissolve. The arriving print leads — it is fully in
+at 72 % of the transition — while the one it replaces keeps its full strength and
+*bleaches*, holding on until the last third and only then clearing. A print that
+fades as fast as it washes reads as a grey ghost of itself rather than as a
+photograph going white.
+
+Grain, vignette and two soft bands of light lie over everything, fixed to the
+lens rather than to the prints: the composition drifts underneath them, which is
+what makes them read as reflection rather than as paint. The drift is slow on
+purpose — periods of 150–240 s — because a drift whose period approaches a
+slide's length is a bob, and a bob reads as a rendering fault.
 
 ### Origami
 
