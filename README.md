@@ -117,10 +117,16 @@ twice.
 The front print takes its photo's own shape, so the border is even on all four
 sides and the whole photo shows — `Fit` and `Fill` are the same rect here, which
 is why the theme ignores that preference. Its size, tilt and position are
-randomised per photo, deliberately short of the largest print that would fit: a
-print that fills the frame has nowhere to move, so every step lands on top of the
-last one and the dissolve reads as a translucent overlay instead of as a new
-print placed on the pile.
+randomised per photo, and it is allowed to run **off the edge of the frame**, the
+way the reference lets a print leave the bottom of the screen: that is what makes
+it read as a physical print larger than the window rather than as a picture fitted
+into one.
+
+It still has to stay the subject, which is measured as a *span*, not an area: a
+1:3 portrait print on a 16:9 screen is narrow however tall it is, so demanding a
+share of the area would force it to be enormous. Spanning at least three quarters
+of the frame in one direction is what keeps it the hero, and that works for every
+shape. An arrangement that fails it is re-rolled from the next salt, deterministically.
 
 The cross-fade is not a plain dissolve. The arriving print leads — it is fully in
 at 72 % of the transition — while the one it replaces keeps its full strength and
@@ -133,7 +139,7 @@ lens rather than to the prints: the composition moves underneath them, which is
 what makes them read as reflection rather than as paint.
 
 That movement is a camera, not three separate animations: the whole composition
-**turns** (1.8° across a hold), **pushes** (2.2 %) and **creeps** (0.8 % of the
+**turns** (2.5° across a hold), **pushes** (3.0 %) and **creeps** (1.1 % of the
 frame), all about the frame centre.
 
 It is a **one-way ramp, not an oscillation**. A sine wave reverses every minute

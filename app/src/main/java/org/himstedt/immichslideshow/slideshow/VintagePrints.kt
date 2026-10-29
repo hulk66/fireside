@@ -56,6 +56,22 @@ object VintagePrints {
     private const val AIR = 0.045f
 
     /**
+     * How much of the frame the front print must span, in at least one direction.
+     *
+     * Measured as a span rather than as an area because the area a print can cover
+     * depends on its shape: a 1:3 portrait print on a 16:9 screen is narrow
+     * however tall it is, and demanding a share of the *area* would force it to be
+     * enormous. Spanning most of the frame in one direction is what makes it the
+     * subject, and it works for every shape.
+     */
+    private const val HERO_SPAN = 0.75f
+
+    /** Largest the print may get, as a share of the largest that would fit. */
+    private const val MAX_OVERFLOW = 1.20f
+
+    private const val ATTEMPTS = 8
+
+    /**
      * How far the composition turns from one end of a hold to the other, and how
      * far it creeps sideways.
      *
@@ -63,9 +79,9 @@ object VintagePrints {
      * or so, which reads as the picture pumping in and out; the reference camera
      * simply keeps going one way for as long as a photo is up.
      */
-    private const val DRIFT_TILT = 0.9f
-    private const val DRIFT_PAN = 0.004f
-    private const val DRIFT_ZOOM = 0.022f
+    private const val DRIFT_TILT = 1.25f
+    private const val DRIFT_PAN = 0.0055f
+    private const val DRIFT_ZOOM = 0.030f
 
     /** The scatter is laid on a jittered grid, so it covers rather than clumps. */
     private const val COLS = 5
@@ -135,31 +151,71 @@ object VintagePrints {
         val availH = frameH * (1f - 2f * AIR)
         val byWidth = availW / (perWidth * cosA + perHeight * sinA)
         val byHeight = availH / (perWidth * sinA + perHeight * cosA)
-        // Deliberately short of the largest print that would fit: a print that
-        // fills the frame has nowhere to move, so every step lands on top of the
-        // last one and the dissolve reads as a translucent overlay instead of as
-        // a new print placed on the pile.
-        val photoHeight = minOf(byWidth, byHeight) * Rng.range(seed, SALT_SIZE, 0.74f, 0.92f)
+        val fitting = minOf(byWidth, byHeight)
 
-        val width = perWidth * photoHeight
-        val height = perHeight * photoHeight
-        val margin = MARGIN * width
-
-        val halfW = (width * cosA + height * sinA) / 2f
-        val halfH = (width * sinA + height * cosA) / 2f
-        val loX = frameW * AIR + halfW
-        val hiX = frameW * (1f - AIR) - halfW
-        val loY = frameH * AIR + halfH
-        val hiY = frameH * (1f - AIR) - halfH
-        return Print(
+        // The print is allowed past the edge of the frame, the way the reference
+        // lets a print run off the bottom of the screen — that is what makes it
+        // read as a physical print larger than the window rather than as a picture
+        // fitted into one. It still has to stay the subject, so an arrangement
+        // that leaves most of the frame uncovered is re-rolled.
+        var best: Print? = null
+        var bestCoverage = -1f
+        for (attempt in 0 until ATTEMPTS) {
+            val photoHeight = fitting * Rng.range(seed, SALT_SIZE + attempt, 0.80f, MAX_OVERFLOW)
+            val width = perWidth * photoHeight
+            val height = perHeight * photoHeight
+            val candidate = Print(
+                photoIndex = photoIndex,
+                centerX = frameW * Rng.range(seed, SALT_X + attempt, 0.08f, 0.92f),
+                centerY = frameH * Rng.range(seed, SALT_Y + attempt, 0.08f, 0.92f),
+                width = width,
+                height = height,
+                angleDeg = angle,
+                margin = MARGIN * width,
+            )
+            val span = maxOf(candidate.width / frameW, candidate.height / frameH)
+            if (span > bestCoverage) {
+                best = candidate
+                bestCoverage = span
+            }
+            if (span >= HERO_SPAN) return candidate
+        }
+        // Never reached in practice, but a print at the edge of the frame is a
+        // better answer than no print at all.
+        return best ?: Print(
             photoIndex = photoIndex,
-            centerX = loX + (hiX - loX).coerceAtLeast(0f) * Rng.unit(seed, SALT_X),
-            centerY = loY + (hiY - loY).coerceAtLeast(0f) * Rng.unit(seed, SALT_Y),
-            width = width,
-            height = height,
+            centerX = frameW / 2f,
+            centerY = frameH / 2f,
+            width = perWidth * fitting,
+            height = perHeight * fitting,
             angleDeg = angle,
-            margin = margin,
+            margin = MARGIN * perWidth * fitting,
         )
+    }
+
+    /** Share of the frame that [print] covers, sampled on a grid. */
+    fun coverage(print: Print, frameW: Float, frameH: Float): Float {
+        val cols = 12
+        val rows = 7
+        var hit = 0
+        for (r in 0 until rows) {
+            for (c in 0 until cols) {
+                val x = (c + 0.5f) / cols * frameW
+                val y = (r + 0.5f) / rows * frameH
+                if (contains(print, x, y)) hit++
+            }
+        }
+        return hit.toFloat() / (cols * rows)
+    }
+
+    /** Is (x, y) inside this tilted print, border included? */
+    fun contains(print: Print, x: Float, y: Float): Boolean {
+        val rad = print.angleDeg * DEG
+        val dx = x - print.centerX
+        val dy = y - print.centerY
+        val localX = dx * cos(rad) + dy * sin(rad)
+        val localY = -dx * sin(rad) + dy * cos(rad)
+        return abs(localX) <= print.width / 2f && abs(localY) <= print.height / 2f
     }
 
     /**
