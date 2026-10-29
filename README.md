@@ -13,8 +13,8 @@ full-screen show and the animated thumbnails in the theme picker.
 ## Features
 
 - **Album browser** — covers, photo counts and dates straight from Immich.
-- **Eleven themes** — Classic, Ken Burns, Slide, Flip, Fold, Shifting Tiles,
-  Reflections, Scrapbook, Vintage Prints, Origami, Photo Grid.
+- **Twelve themes** — Classic, Ken Burns, Slide, Flip, Fold, Shifting Tiles,
+  Sliding Panels, Reflections, Scrapbook, Vintage Prints, Origami, Photo Grid.
 - **Fill or fit** — photos can cover the screen (crop, no bars) or be shown
   whole in their original aspect ratio on a dark backdrop.
 - **Reflections** — a bright stage where most steps are a collage (a tall column
@@ -92,7 +92,7 @@ with or without a scheme or a trailing `/api`.
 | ▲ ▼ ◀ ▶ | move focus / previous-next photo while playing |
 | OK / Enter / Space | select, apply, pause & resume |
 | MENU | open the theme picker while playing |
-| 1 – 0 | jump straight to themes 1…10 (the eleventh is in the picker) |
+| 1 – 0 | jump straight to themes 1…10 (the last two are in the picker) |
 | BACK | close the picker / leave the album / exit |
 
 Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`,
@@ -103,6 +103,35 @@ Settings live in `immich_slideshow.xml` (`slideshow_effect`, `slideshow_seconds`
 each photo to fill the screen, on shows the whole frame with bars. The two walls
 — Photo Grid and Origami — keep filling regardless: they are mosaics of crops,
 and letterboxing every tile would fill the wall with bars.
+
+### Sliding Panels
+
+A wall of four to six photos whose panels slide their photo out and the next one
+in. A cycle is one wall: each panel changes **once**, one at a time, 2.5 s apart —
+so a four-panel wall has every panel changed once in ten seconds — and then the
+whole wall is exchanged at once for the next one, with a new cut and new photos.
+Both rhythms the reference uses, in one cycle.
+
+The change is a **chase, not a blink**: the arriving photo pushes the leaving one
+out of the panel, so the two are adjacent at every instant and no black shows. The
+reference lets its panels go black between photos; this does not, which is what
+makes the wall read as panels sliding rather than as pictures flickering.
+
+Photos are consumed in album order and never repeated inside a cycle — the wall
+opens with the first *n* photos, each panel's turn brings in the photo *n* places
+further on, and the exchange brings in the next cycle's opening photos. So every
+photo is shown exactly once per pass through the album.
+
+The layout is cut per cycle from that cycle's opening photos, so panels keep their
+places while their contents slide; the photos are cropped to fill their panel. The
+direction of travel is randomised per step (deterministically, from the cycle and
+step) so a wall does not always slide the same way.
+
+It is a `mosaic` effect, so it takes its timing from pages rather than slides — but
+its page is a *panel*, 2.5 s rather than the sixteen a dense wall needs, and the
+chrome says "2 s per panel" accordingly. `SlidingPanels` holds all of it as pure
+arithmetic: panel counts, the photo each panel holds at any step, the exchange,
+and the slide progress, all derived from the clock rather than accumulated.
 
 ### Vintage Prints
 

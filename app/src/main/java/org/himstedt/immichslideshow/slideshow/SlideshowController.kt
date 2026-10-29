@@ -142,6 +142,12 @@ class SlideshowController(
             // Exactly the wall's own window plus the next page, using the same
             // page size the renderer lays out with. A different size here means
             // a different window of photos, and every cell draws empty.
+            if (prefs.effect == SlideshowEffect.SLIDING_PANELS) {
+                // Panels run on their own clock, a couple of seconds each, and the
+                // window is the panels either side of now rather than a page.
+                for (i in SlidingPanels.prefetch(elapsedMs, ordered.size)) request(i, tile = true)
+                return
+            }
             val slots = GridPlan.slotsForEffect(prefs.effect, gridSlots)
             val indices = if (prefs.effect == SlideshowEffect.ORIGAMI) {
                 // The wall turns in pages of its own: two whole-wall turns and
@@ -235,8 +241,12 @@ class SlideshowController(
             // A mosaic has no per-photo steps: one press is one page of the wall.
             // Stepping by a slide cycle instead would land mid-page and change
             // nothing on screen, which read as the remote not working.
-            val page = Math.floorDiv(elapsedMs, GridPlan.PAGE_MS)
-            elapsedMs = ((page + direction).coerceAtLeast(0L)) * GridPlan.PAGE_MS
+            // A wall steps one page at a time, and a page is as long as the effect
+            // says it is: a couple of seconds for Sliding Panels' panels, sixteen
+            // for a dense wall of photos.
+            val pageMs = prefs.effect.pageMs
+            val page = Math.floorDiv(elapsedMs, pageMs)
+            elapsedMs = ((page + direction).coerceAtLeast(0L)) * pageMs
             emit()
             return
         }

@@ -383,7 +383,7 @@ class SlideshowEffectTest {
 
     @Test
     fun `the themes ship in the classic order`() {
-        assertEquals(11, SlideshowEffect.entries.size)
+        assertEquals(12, SlideshowEffect.entries.size)
         assertEquals(SlideshowEffect.CLASSIC, SlideshowEffect.entries.first())
         assertEquals(SlideshowEffect.PHOTO_GRID, SlideshowEffect.entries.last())
         // The print theme belongs with the other paper themes, not after the walls.
@@ -394,11 +394,19 @@ class SlideshowEffectTest {
     }
 
     @Test
-    fun `the two walls are mosaics`() {
-        // Both paint a whole wall of photos instead of one photo at a time, so
-        // both take their timing from pages rather than from slides.
-        val mosaics = SlideshowEffect.entries.filter { it.mosaic }
-        assertEquals(listOf(SlideshowEffect.ORIGAMI, SlideshowEffect.PHOTO_GRID), mosaics.sortedBy { it.ordinal })
+    fun `the three walls are mosaics`() {
+        // These paint a whole wall of photos instead of one photo at a time, so
+        // they take their timing from pages rather than from slides.
+        val mosaics = SlideshowEffect.entries.filter { it.mosaic }.sortedBy { it.ordinal }
+        assertEquals(
+            listOf(SlideshowEffect.SLIDING_PANELS, SlideshowEffect.ORIGAMI, SlideshowEffect.PHOTO_GRID),
+            mosaics,
+        )
+        // Sliding Panels runs on panels, so its page is a couple of seconds; the
+        // dense walls keep the sixteen a wall of photos needs.
+        assertEquals(SlidingPanels.STEP_MS, SlideshowEffect.SLIDING_PANELS.pageMs)
+        assertEquals(GridPlan.PAGE_MS, SlideshowEffect.PHOTO_GRID.pageMs)
+        assertEquals(GridPlan.PAGE_MS, SlideshowEffect.ORIGAMI.pageMs)
     }
 
     @Test
@@ -436,7 +444,7 @@ class SlideshowEffectTest {
         // the picker. What matters is that no two keys land on the same theme and
         // that the ten they do cover are distinct.
         assertEquals(10, SlideshowEffect.ordered.take(10).toSet().size)
-        assertEquals(11, SlideshowEffect.ordered.size)
+        assertEquals(12, SlideshowEffect.ordered.size)
         assertEquals(SlideshowEffect.ordered, SlideshowEffect.entries.toList())
     }
 }

@@ -13,6 +13,12 @@ enum class SlideshowEffect(
     val tagline: String,
     val transitionFraction: Float,
     val mosaic: Boolean = false,
+    /**
+     * How long one page of a mosaic stays up. Only the walls use it; Sliding
+     * Panels runs on panels, so its page is a couple of seconds rather than the
+     * sixteen a dense wall of photos needs.
+     */
+    val pageMs: Long = GridPlan.PAGE_MS,
 ) {
     CLASSIC(
         title = "Classic",
@@ -43,6 +49,13 @@ enum class SlideshowEffect(
         title = "Shifting Tiles",
         tagline = "A grid of tiles shuffles into the next photo",
         transitionFraction = 0.28f,
+    ),
+    SLIDING_PANELS(
+        title = "Sliding Panels",
+        tagline = "Panels slide their photo out and the next one in",
+        transitionFraction = 0.2f,
+        mosaic = true,
+        pageMs = SlidingPanels.STEP_MS,
     ),
     REFLECTIONS(
         title = "Reflections",

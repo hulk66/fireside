@@ -1,0 +1,239 @@
+package org.himstedt.immichslideshow.slideshow
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The wall's own arithmetic: how many panels, which photo each holds, who turns
+ * when, and whether a pass through the album shows every photo exactly once.
+ */
+class SlidingPanelsTest {
+
+    private val count = 40
+
+    private fun stepAt(ms: Long) = SlidingPanels.stepAt(ms, count)
+
+    /** The first moment of every step of [cycle]. */
+    private fun stepsOf(cycle: Long): List<PanelStep> {
+        val start = cycleStart(cycle)
+        val panels = SlidingPanels.panelsFor(cycle)
+        return (0..panels).map { stepAt(start + it * SlidingPanels.STEP_MS) }
+    }
+
+    private fun cycleStart(cycle: Long): Long {
+        var t = 0L
+        for (c in 0 until cycle) t += SlidingPanels.cycleMs(c)
+        return t
+    }
+
+    @Test
+    fun `the wall holds four to six panels`() {
+        val counts = (0L..5L).map { SlidingPanels.panelsFor(it) }
+        assertEquals(listOf(4, 5, 6, 4, 5, 6), counts)
+        assertTrue("never fewer than four panels", (0L..30L).all { SlidingPanels.panelsFor(it) >= 4 })
+        assertTrue("never more than six panels", (0L..30L).all { SlidingPanels.panelsFor(it) <= 6 })
+    }
+
+    @Test
+    fun `each panel takes its turn exactly once per cycle`() {
+        for (cycle in 0L..4L) {
+            val steps = stepsOf(cycle)
+            val panels = SlidingPanels.panelsFor(cycle)
+            assertEquals("a cycle is one step per panel plus the exchange", panels + 1, steps.size)
+            val turned = steps.filter { !it.exchange }.map { it.turningSlot }
+            assertEquals("every panel should turn once", (0 until panels).toList(), turned)
+            // And each single step turns exactly one panel.
+            steps.filter { !it.exchange }.forEach {
+                assertEquals("a single step should turn one panel", 1, it.before.indices.count { k -> it.before[k] != it.photos[k] })
+            }
+            // The last step is the exchange, and it is the only one.
+            assertTrue("the last step is the exchange", steps.last().exchange)
+            assertEquals(1, steps.count { it.exchange })
+        }
+    }
+
+    @Test
+    fun `the exchange brings in the next cycle's opening photos`() {
+        for (cycle in 0L..4L) {
+            val exchange = stepsOf(cycle).last()
+            val nextOpening = stepsOf(cycle + 1).first()
+            assertEquals(
+                "the exchange should arrive at the next wall",
+                nextOpening.before,
+                exchange.arrivingPhotos,
+            )
+            assertEquals(SlidingPanels.panelsFor(cycle + 1), exchange.arrivingPanels)
+        }
+    }
+
+    @Test
+    fun `no photo is shown twice in a cycle`() {
+        // This is the point of the rhythm: every panel changes once, and the wall
+        // is then replaced - so a pass through a cycle never repeats a photo.
+        for (cycle in 0L..3L) {
+            // The photos this cycle puts on the wall: the opening wall, then the
+            // photo each panel's turn brings in. The exchange's arrivals belong to
+            // the next cycle and are checked there.
+            val shown = ArrayList<Int>()
+            val steps = stepsOf(cycle)
+            shown.addAll(steps.first().before)
+            steps.filter { !it.exchange }.forEach { step ->
+                val slot = step.turningSlot
+                shown.add(step.photos[slot])
+            }
+            val distinct = shown.distinct()
+            assertEquals("a cycle repeated a photo: $shown", distinct.size, shown.size)
+            assertEquals(
+                "a cycle should show two walls' worth",
+                2 * SlidingPanels.panelsFor(cycle),
+                distinct.size,
+            )
+        }
+    }
+
+    @Test
+    fun `a four panel wall is fully changed in ten seconds`() {
+        // The rhythm asked for: two to three seconds a photo, so a wall of four has
+        // every panel changed once inside eight to twelve seconds.
+        assertEquals(4, SlidingPanels.panelsFor(0L))
+        // The wall is fully changed once the fourth panel has finished its slide,
+        // which is four steps of the panel clock.
+        val spanMs = 4 * SlidingPanels.STEP_MS
+        assertTrue("four panels take ${spanMs}ms to all turn", spanMs in 8_000L..12_000L)
+        assertTrue("a step is two to three seconds", SlidingPanels.STEP_MS in 2_000L..3_000L)
+    }
+
+    @Test
+    fun `a turning panel always changes to a different photo`() {
+        // A turn that leaves the same photo behind would be a slide with nothing to
+        // reveal - and with the chase there is no gap to hide it.
+        for (ms in 0L..120_000L step 250L) {
+            val step = stepAt(ms)
+            step.before.indices.forEach { k ->
+                if (step.before[k] == step.photos[k]) return@forEach
+                assertNotEquals("slot $k turns to itself", step.before[k], step.photos[k])
+            }
+        }
+    }
+
+    @Test
+    fun `the slide rests first and moves at the end of the step`() {
+        // Each photo gets its full step: the slide occupies the tail of it, so a
+        // panel is not permanently in motion.
+        for (cycle in 0L..1L) {
+            val start = cycleStart(cycle)
+            val panels = SlidingPanels.panelsFor(cycle)
+            for (index in 0 until panels) {
+                val base = start + index * SlidingPanels.STEP_MS
+                assertEquals("slide should be at rest at the start of step $index", 0f, stepAt(base).slide, 1e-4f)
+                assertTrue(
+                    "slide should be under way late in the step",
+                    stepAt(base + SlidingPanels.STEP_MS * 3 / 4).slide > 0f,
+                )
+                assertEquals(
+                    "slide should be finished at the end of step $index",
+                    1f,
+                    stepAt(base + SlidingPanels.STEP_MS - 1).slide,
+                    0.02f,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `the slide never goes backwards`() {
+        for (cycle in 0L..2L) {
+            val start = cycleStart(cycle)
+            val panels = SlidingPanels.panelsFor(cycle)
+            for (index in 0 until panels) {
+                var previous = -1f
+                for (offset in 0L until SlidingPanels.STEP_MS step 25L) {
+                    val slide = stepAt(start + index * SlidingPanels.STEP_MS + offset).slide
+                    assertTrue("slide reversed at step $index", slide >= previous - 1e-4f)
+                    previous = slide
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `the direction is a real direction and it varies`() {
+        val directions = (0L..11L).map { SlidingPanels.directionFor(it, 0) }.toSet()
+        assertEquals("both ways should be used", setOf(-1, 1), directions)
+        for (cycle in 0L..5L) {
+            for (index in 0..6) {
+                val direction = SlidingPanels.directionFor(cycle, index)
+                assertTrue("direction out of range: $direction", direction == 1 || direction == -1)
+            }
+        }
+        // Deterministic, so a preview cannot jitter and a photo cannot jump.
+        assertEquals(SlidingPanels.directionFor(3L, 2), SlidingPanels.directionFor(3L, 2))
+    }
+
+    @Test
+    fun `the exchange runs in the same direction as the single steps`() {
+        for (ms in 0L..120_000L step 500L) {
+            val step = stepAt(ms)
+            assertTrue(step.direction == 1 || step.direction == -1)
+        }
+    }
+
+    @Test
+    fun `indices stay inside a short album`() {
+        // Fewer photos than panels is the awkward case: the wall has to wrap
+        // several times inside one step.
+        for (album in listOf(1, 2, 3, 5, 7)) {
+            for (ms in 0L..60_000L step 700L) {
+                val step = SlidingPanels.stepAt(ms, album)
+                for (photo in step.before + step.photos + step.arrivingPhotos) {
+                    assertTrue("photo $photo outside 0..<$album", photo in 0 until album)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `an empty album has no panels`() {
+        val step = SlidingPanels.stepAt(5_000L, 0)
+        assertTrue(step.before.isEmpty())
+        assertFalse(step.exchange)
+        assertTrue(SlidingPanels.prefetch(5_000L, 0).isEmpty())
+    }
+
+    @Test
+    fun `prefetch covers both photos of a turning panel`() {
+        for (ms in 0L..120_000L step 300L) {
+            val step = stepAt(ms)
+            val wanted = SlidingPanels.prefetch(ms, count)
+            for (photo in step.before + step.photos + step.arrivingPhotos) {
+                assertTrue("at ${ms}ms the panel photo $photo is not prefetched", photo in wanted)
+            }
+            // The step after this one, so the arriving photo is decoded before the
+            // slide starts.
+            val next = SlidingPanels.stepAt(ms + SlidingPanels.STEP_MS, count)
+            for (photo in next.before + next.photos) {
+                assertTrue("at ${ms}ms the next step's photo $photo is not prefetched", photo in wanted)
+            }
+        }
+    }
+
+    @Test
+    fun `the clock is continuous across steps and cycles`() {
+        // The renderer derives everything from the clock, so a gap between one step
+        // and the next would show as a jump.
+        var previous = stepAt(0L)
+        for (ms in 25L..180_000L step 25L) {
+            val now = stepAt(ms)
+            if (now.cycle == previous.cycle && now.index == previous.index) {
+                assertTrue("slide jumped inside step", now.slide >= previous.slide - 1e-4f)
+            } else {
+                // A new step always starts at rest.
+                assertEquals("step ${now.index} of cycle ${now.cycle} did not start at rest", 0f, now.slide, 0.05f)
+            }
+            previous = now
+        }
+    }
+}

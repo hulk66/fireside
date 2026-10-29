@@ -57,6 +57,7 @@ object SlideshowRenderer {
             SlideshowEffect.SHIFTING_TILES -> drawShiftingTiles(frame)
             SlideshowEffect.REFLECTIONS -> drawReflections(frame, textMeasurer)
             SlideshowEffect.SCRAPBOOK -> drawScrapbook(frame, textMeasurer)
+            SlideshowEffect.SLIDING_PANELS -> drawSlidingPanels(frame)
             SlideshowEffect.VINTAGE_PRINTS -> drawVintagePrints(frame)
             SlideshowEffect.ORIGAMI -> drawOrigami(frame)
             SlideshowEffect.PHOTO_GRID -> drawPhotoGrid(frame)
@@ -70,7 +71,8 @@ object SlideshowRenderer {
         if (frame.effect != SlideshowEffect.SCRAPBOOK &&
             frame.effect != SlideshowEffect.PHOTO_GRID &&
             frame.effect != SlideshowEffect.ORIGAMI &&
-            frame.effect != SlideshowEffect.VINTAGE_PRINTS
+            frame.effect != SlideshowEffect.VINTAGE_PRINTS &&
+            frame.effect != SlideshowEffect.SLIDING_PANELS
         ) {
             drawCaption(
                 frame = frame,
@@ -664,6 +666,77 @@ object SlideshowRenderer {
         if (photo.id.hashCode().mod(3) == 0 || arriving) {
             val tapeAlpha = if (arriving) ((settle - 0.85f) / 0.15f).coerceIn(0f, 1f) else alpha
             if (tapeAlpha > 0.02f) drawTape(cardRect, rotation, tapeAlpha)
+        }
+    }
+
+    /**
+     * Sliding Panels: a wall of four to six photos whose panels slide their photo
+     * out and the next one in.
+     *
+     * One panel changes at a time — the arriving photo chasing the leaving one out
+     * of the panel, so the panel is never empty — and every few steps the whole
+     * wall is exchanged at once for the next one. Each panel takes its turn exactly
+     * once per cycle, so the wall is alive between exchanges without replacing
+     * every photograph to say one thing.
+     */
+    private fun DrawScope.drawSlidingPanels(frame: SlideshowFrame) {
+        val w = size.width
+        val h = size.height
+        // Only ever visible for a frame: the photos are adjacent throughout, so
+        // this is the seam colour rather than a gap.
+        drawRect(Color(0xFF0B0D12))
+
+        val step = SlidingPanels.stepAt(frame.elapsedMs, frame.count)
+        if (step.before.isEmpty()) {
+            drawPlaceholder()
+            return
+        }
+        val gap = 4.dp.toPx()
+        val p = Easing.easeInOutCubic(step.slide)
+
+        if (step.exchange) {
+            // The whole wall goes and the next arrives, both travelling the same
+            // way and adjacent at every instant - so the exchange reads as one
+            // sheet of panels passing rather than as a cross-fade.
+            val leavingCells = justifiedCells(frame, step.before, w, h, gap)
+            val arrivingCells = justifiedCells(frame, step.arrivingPhotos, w, h, gap)
+            withTransform({ translate(step.direction * p * w, 0f) }) {
+                step.before.forEachIndexed { slot, photo ->
+                    drawGridTile(frame.bitmaps.tile(photo), leavingCells.getOrNull(slot), 1f)
+                }
+            }
+            withTransform({ translate(step.direction * (p - 1f) * w, 0f) }) {
+                step.arrivingPhotos.forEachIndexed { slot, photo ->
+                    drawGridTile(frame.bitmaps.tile(photo), arrivingCells.getOrNull(slot), 1f)
+                }
+            }
+            return
+        }
+
+        val cells = justifiedCells(frame, step.before, w, h, gap)
+        step.before.forEachIndexed { slot, fromPhoto ->
+            val cell = cells.getOrNull(slot) ?: return@forEachIndexed
+            val toPhoto = step.photos.getOrNull(slot) ?: fromPhoto
+            if (fromPhoto == toPhoto || p <= 0.001f) {
+                drawGridTile(frame.bitmaps.tile(fromPhoto), cell, 1f)
+                return@forEachIndexed
+            }
+            if (p >= 0.999f) {
+                drawGridTile(frame.bitmaps.tile(toPhoto), cell, 1f)
+                return@forEachIndexed
+            }
+            // One panel's worth of chase: the leaving photo moves out by exactly
+            // the width the arriving one has to cover, so they stay edge to edge
+            // and the panel never shows a gap.
+            val travel = step.direction * p * cell.width
+            clipRect(cell.left, cell.top, cell.right, cell.bottom) {
+                withTransform({ translate(travel, 0f) }) {
+                    drawGridTile(frame.bitmaps.tile(fromPhoto), cell, 1f)
+                }
+                withTransform({ translate(travel - step.direction * cell.width, 0f) }) {
+                    drawGridTile(frame.bitmaps.tile(toPhoto), cell, 1f)
+                }
+            }
         }
     }
 

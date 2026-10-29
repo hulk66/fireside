@@ -57,6 +57,7 @@ import org.himstedt.immichslideshow.data.Photo
 import org.himstedt.immichslideshow.data.SlideshowPrefs
 import org.himstedt.immichslideshow.slideshow.SlideshowController
 import org.himstedt.immichslideshow.slideshow.GridPlan
+import org.himstedt.immichslideshow.slideshow.SlidingPanels
 import org.himstedt.immichslideshow.slideshow.SlideshowEffect
 import org.himstedt.immichslideshow.slideshow.drawSlideshow
 import org.himstedt.immichslideshow.ui.components.AppBackground
@@ -333,10 +334,15 @@ private fun SlideshowChrome(
                     text = buildString {
                         append(info.effect.title)
                         append("  ·  ")
-                        if (info.effect.mosaic) {
+                        if (info.effect == SlideshowEffect.SLIDING_PANELS) {
+                            // This one changes a panel at a time, so its unit is
+                            // the panel rather than a page of photos.
+                            append(SlidingPanels.STEP_MS / 1000)
+                            append("s per panel")
+                        } else if (info.effect.mosaic) {
                             // A wall turns a page at a time; quoting the per-photo
                             // setting here would name a duration nothing obeys.
-                            append(GridPlan.PAGE_MS / 1000)
+                            append(info.effect.pageMs / 1000)
                             append("s per page")
                         } else {
                             append(info.secondsPerPhoto)
