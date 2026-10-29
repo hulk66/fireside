@@ -71,6 +71,10 @@ object VintagePrints {
 
     private const val ATTEMPTS = 8
 
+    /** How far off centre the front print may sit, as a share of the frame. */
+    private const val CENTRE_LO = 0.38f
+    private const val CENTRE_HI = 0.62f
+
     /**
      * How far the composition turns from one end of a hold to the other, and how
      * far it creeps sideways.
@@ -166,8 +170,12 @@ object VintagePrints {
             val height = perHeight * photoHeight
             val candidate = Print(
                 photoIndex = photoIndex,
-                centerX = frameW * Rng.range(seed, SALT_X + attempt, 0.08f, 0.92f),
-                centerY = frameH * Rng.range(seed, SALT_Y + attempt, 0.08f, 0.92f),
+                // Near the middle of the screen, not anywhere on it: a print
+                // pinned to a corner reads as a layout, while one sitting a little
+                // off centre reads as a print put down by hand. The size carries
+                // the variation, and the print is free to run off the edges.
+                centerX = frameW * Rng.range(seed, SALT_X + attempt, CENTRE_LO, CENTRE_HI),
+                centerY = frameH * Rng.range(seed, SALT_Y + attempt, CENTRE_LO, CENTRE_HI),
                 width = width,
                 height = height,
                 angleDeg = angle,
@@ -329,21 +337,20 @@ object VintagePrints {
      * rendering fault rather than as breathing.
      */
     /**
-     * Where the camera is on its one-way run, 0..1.
+     * Where a photo's camera is on its one-way run, 0..1.
      *
-     * It creeps from one end of its travel to the other across the *hold* — the
-     * whole time a photo is up — and comes back during the cross-fade, where the
-     * whole composition is being replaced anyway and the return is hidden. That is
-     * what the reference does: each photo gets its own push, and the reset is
-     * masked by the transition. An oscillation over a fixed period would instead
-     * reverse in the middle of a hold, which is the pumping this used to have.
+     * A photo creeps from one end of its travel to the other across its *hold* and
+     * then stops, holding that framing while it fades out. It never comes back:
+     * the photo arriving is a different print with a camera of its own, starting
+     * at the beginning of its own run, and the cross-fade bridges the two
+     * framings. Nothing reverses at any point, in the hold or in the fade.
+     *
+     * Coming back instead - returning to the start during the transition - is what
+     * made the picture pump: the swing back was visible at the start of the fade,
+     * and again as the next hold set off the other way.
      */
     fun phase(hold: Float, transition: Float): Float =
-        if (transition > 0f) {
-            1f - Easing.smoothstep(transition)
-        } else {
-            hold.coerceIn(0f, 1f)
-        }
+        if (transition > 0f) 1f else hold.coerceIn(0f, 1f)
 
     fun drift(phase: Float, frameW: Float, frameH: Float): Drift {
         val p = phase.coerceIn(0f, 1f)

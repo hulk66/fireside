@@ -57,8 +57,17 @@ class VintagePrintsTest {
                     "$aspect at seed $seed is a sliver",
                     VintagePrints.coverage(print, w, h) > 0.10f,
                 )
-                assertTrue("centre left the frame: ${print.centerX}", print.centerX in 0f..w)
-                assertTrue("centre left the frame: ${print.centerY}", print.centerY in 0f..h)
+                // Near the middle of the screen, not anywhere on it: a print
+                // pinned to a corner reads as a layout rather than as a print put
+                // down by hand.
+                assertTrue(
+                    "$aspect at seed $seed sits too far off centre: ${print.centerX}",
+                    print.centerX in w * 0.35f..w * 0.65f,
+                )
+                assertTrue(
+                    "$aspect at seed $seed sits too far off centre: ${print.centerY}",
+                    print.centerY in h * 0.35f..h * 0.65f,
+                )
                 val past = print.centerX - print.halfWidth < -0.5f ||
                     print.centerX + print.halfWidth > w + 0.5f ||
                     print.centerY - print.halfHeight < -0.5f ||
@@ -283,43 +292,62 @@ class VintagePrintsTest {
     }
 
     @Test
-    fun `the camera travels one way through the hold and returns during the fade`() {
-        // The reset has to land inside the cross-fade, where the whole composition
-        // is being replaced anyway; a reset during the hold would be a visible
-        // jump, and a sine wave would reverse in the middle of the hold.
+    fun `a photo's camera runs one way and then stops`() {
+        // One-way across the hold, and frozen at the far end through the fade. It
+        // never comes back: the photo arriving is a different print with its own
+        // camera, and the cross-fade bridges the two framings. Any return is a
+        // visible swing, which is the pumping this had.
         assertEquals("the hold should start at one end", 0f, VintagePrints.phase(0f, 0f), 1e-4f)
         assertEquals("the hold should end at the other", 1f, VintagePrints.phase(1f, 0f), 1e-4f)
-        // Continuous where the fade takes over...
-        assertEquals(1f, VintagePrints.phase(1f, 0.0001f), 0.01f)
-        // ...and back at the start by the time the fade is done.
-        assertEquals(0f, VintagePrints.phase(1f, 1f), 1e-4f)
-        // Monotonic through the hold, monotonic back through the fade.
         var previous = VintagePrints.phase(0f, 0f)
         for (i in 1..50) {
             val now = VintagePrints.phase(i / 50f, 0f)
-            assertTrue("hold phase reversed at $i", now >= previous)
+            assertTrue("the hold reversed at $i", now >= previous)
             previous = now
         }
-        previous = VintagePrints.phase(1f, 0f)
-        for (i in 1..50) {
-            val now = VintagePrints.phase(1f, i / 50f)
-            assertTrue("fade phase rose at $i", now <= previous)
-            previous = now
+        // And through the whole fade it does not move at all.
+        for (i in 0..50) {
+            assertEquals(
+                "the camera moved during the fade at $i",
+                1f,
+                VintagePrints.phase(1f, i / 50f),
+                1e-4f,
+            )
         }
     }
 
     @Test
-    fun `the reset lands on the cross-fade, not on a settled photo`() {
-        // The two ends of the travel differ by the full range, so the moment the
-        // camera snaps back has to be a moment when the picture is changing. It is
-        // the fade: at the start of the fade the outgoing print is still whole, and
-        // by its end the arriving one is.
-        val start = VintagePrints.drift(VintagePrints.phase(1f, 0f), w, h)
-        val end = VintagePrints.drift(VintagePrints.phase(1f, 1f), w, h)
-        assertTrue("no travel to reset", abs(start.angleDeg - end.angleDeg) > 1.0f)
-        val midFade = VintagePrints.drift(VintagePrints.phase(1f, 0.5f), w, h)
-        // Halfway back, i.e. the reset is a move through the fade, not a jump.
-        assertTrue("the reset is a jump", abs(midFade.angleDeg) < abs(start.angleDeg))
+    fun `the arriving photo starts its own run at the beginning`() {
+        // The incoming composition is drawn at phase 0 for the whole fade, so its
+        // own hold can start from there without a jump.
+        val arriving = VintagePrints.drift(0f, w, h)
+        val firstFrameOfItsHold = VintagePrints.drift(VintagePrints.phase(0f, 0f), w, h)
+        assertEquals(arriving, firstFrameOfItsHold)
+        // And the two framings really are different, or the fade would bridge
+        // nothing and the print would appear to jump into its end state.
+        val leaving = VintagePrints.drift(VintagePrints.phase(1f, 0.5f), w, h)
+        assertTrue("the two framings are the same", abs(leaving.angleDeg - arriving.angleDeg) > 1f)
+    }
+
+    @Test
+    fun `nothing reverses during a whole cycle`() {
+        // Walk a cycle the way the renderer does - hold then fade - and assert the
+        // camera never turns round. This is the pumping, as a test: the old
+        // implementation returned to its start during the fade, so the motion went
+        // forward, back, then forward again.
+        val steps = 60
+        var previous = VintagePrints.phase(0f, 0f)
+        for (i in 1..steps) {
+            val hold = i.toFloat() / steps
+            val now = VintagePrints.phase(hold, 0f)
+            assertTrue("the camera reversed inside the hold at $i", now >= previous)
+            previous = now
+        }
+        for (i in 1..steps) {
+            val now = VintagePrints.phase(1f, i.toFloat() / steps)
+            assertTrue("the camera moved during the fade at $i", now >= previous - 1e-5f)
+            previous = now
+        }
     }
 
     @Test

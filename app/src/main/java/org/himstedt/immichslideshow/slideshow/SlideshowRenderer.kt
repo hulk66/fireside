@@ -688,33 +688,54 @@ object SlideshowRenderer {
         drawRect(Color(0xFF15120E))
 
         val blend = VintagePrints.blend(frame.transition)
-        val drift = VintagePrints.drift(VintagePrints.phase(frame.hold, frame.transition), w, h)
-        // The whole composition turns, pushes and creeps - one camera, not three
-        // separate animations. The glass and the grain are drawn outside this, so
-        // they stay with the lens while the pile moves underneath them.
+
+        // Each photo carries its *own* camera. The one leaving is at the end of
+        // its travel and the one arriving is at the start of its own, and the
+        // cross-fade bridges the two framings.
+        //
+        // The alternative - one camera for the whole stage - has to get back to
+        // where it started somehow, and the only moment available is the fade, so
+        // the picture visibly swings back over the transition and forward again
+        // after it. Two cameras need no return: nothing reverses, ever.
+        val leaving = VintagePrints.drift(VintagePrints.phase(frame.hold, frame.transition), w, h)
+        camera(leaving, w, h) {
+            drawPrintScatter(frame, frame.currentIndex, w, h, 1f)
+            if (blend.outgoing > 0.01f) {
+                drawFrontPrint(frame, frame.currentIndex, w, h, blend.outgoing, blend.wash)
+            }
+        }
+
+        if (blend.incoming > 0.01f) {
+            // The arriving photo starts at the beginning of its own run and holds
+            // there until its hold begins; its travel starts then.
+            val arriving = VintagePrints.drift(0f, w, h)
+            camera(arriving, w, h) {
+                drawPrintScatter(frame, frame.nextIndex, w, h, blend.incoming)
+                drawFrontPrint(frame, frame.nextIndex, w, h, blend.incoming, 0f)
+            }
+        }
+
+        // Glass and grain are fixed to the lens: the compositions move underneath
+        // them, which is what makes them read as reflection rather than as paint
+        // on the prints.
+        drawGlassStreaks(w, h)
+        drawFilmGrain(w, h)
+    }
+
+    /** The whole composition turning, pushing and creeping as one camera. */
+    private inline fun DrawScope.camera(
+        drift: VintagePrints.Drift,
+        w: Float,
+        h: Float,
+        block: DrawScope.() -> Unit,
+    ) {
         withTransform({
             translate(drift.dx * w, drift.dy * h)
             rotate(drift.angleDeg, Offset(w / 2f, h / 2f))
             scale(drift.scale, drift.scale, Offset(w / 2f, h / 2f))
         }) {
-            // The incoming pile fades in over the outgoing one, so the scatter
-            // re-deals without either layer ever being half-drawn.
-            drawPrintScatter(frame, frame.currentIndex, w, h, 1f)
-            if (blend.incoming > 0.01f) {
-                drawPrintScatter(frame, frame.nextIndex, w, h, blend.incoming)
-            }
-            if (blend.outgoing > 0.01f) {
-                drawFrontPrint(frame, frame.currentIndex, w, h, blend.outgoing, blend.wash)
-            }
-            if (blend.incoming > 0.01f) {
-                drawFrontPrint(frame, frame.nextIndex, w, h, blend.incoming, 0f)
-            }
+            block()
         }
-        // Glass and grain are fixed to the lens: the composition drifts
-        // underneath them, which is what makes them read as reflection rather
-        // than as paint on the prints.
-        drawGlassStreaks(w, h)
-        drawFilmGrain(w, h)
     }
 
     /** The pile behind the front print: the album's other photos, sunk in shadow. */

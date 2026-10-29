@@ -120,7 +120,10 @@ is why the theme ignores that preference. Its size, tilt and position are
 randomised per photo, and it is allowed to run **off the edge of the frame**, the
 way the reference lets a print leave the bottom of the screen: that is what makes
 it read as a physical print larger than the window rather than as a picture fitted
-into one.
+into one. Its centre stays near the middle of the screen, though — between 38 %
+and 62 % of the frame in each direction — because a print pinned to a corner reads
+as a layout, while one sitting a little off centre reads as a print put down by
+hand. The size carries the variation.
 
 It still has to stay the subject, which is measured as a *span*, not an area: a
 1:3 portrait print on a 16:9 screen is narrow however tall it is, so demanding a
@@ -142,15 +145,22 @@ That movement is a camera, not three separate animations: the whole composition
 **turns** (2.5° across a hold), **pushes** (3.0 %) and **creeps** (1.1 % of the
 frame), all about the frame centre.
 
-It is a **one-way ramp, not an oscillation**. A sine wave reverses every minute
-or so, and that reads as the picture pumping in and out — the first version did
-exactly that, reversing 5–6 times per three minutes. Instead the camera travels
-from one end of its run to the other across the *hold* — the whole time a photo
-is up — and comes back during the cross-fade, where the whole composition is
-being replaced anyway. That is what the reference does: each photo gets its own
-push, and the reset is masked by the transition. `VintagePrints.phase(hold,
-transition)` is that ramp, and a test asserts every channel moves one direction
-from the first frame of a hold to the last.
+It is a **one-way ramp, not an oscillation**, and there is no return at all.
+
+A sine wave reverses every minute or so, which reads as the picture pumping in and
+out — the first version did exactly that, reversing 5–6 times per three minutes.
+Returning to the start during the cross-fade was the second attempt, and it was
+still wrong: the swing back was visible at the start of the fade, and again as the
+next hold set off the other way.
+
+What works is **one camera per photo**. A photo creeps from one end of its run to
+the other across its hold and then *stops*, holding that framing while it fades
+out. The photo arriving is a different print with a camera of its own, starting at
+the beginning of its own run, and the cross-fade bridges the two framings. Nothing
+reverses at any point, in the hold or in the fade, and nothing jumps either: both
+ends of the fade are continuous by construction. `VintagePrints.phase(hold,
+transition)` is the ramp, frozen through the fade, and tests walk a whole cycle
+asserting the camera never turns round.
 
 Turning a full-frame composition uncovers its corners, and creeping sideways
 uncovers an edge, so the zoom pays for both — and it pays for the *steepest* turn
