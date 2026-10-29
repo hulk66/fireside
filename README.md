@@ -133,19 +133,28 @@ lens rather than to the prints: the composition moves underneath them, which is
 what makes them read as reflection rather than as paint.
 
 That movement is a camera, not three separate animations: the whole composition
-**turns** (±1.2° over 46 s), **pushes** and **creeps** (±0.45 % of the frame over
-70 s), all about the frame centre. It is deliberately slow — a few degrees over
-half a minute reads as a camera creeping round the table, while a few degrees
-over a slide reads as a wobble.
+**turns** (1.8° across a hold), **pushes** (2.2 %) and **creeps** (0.8 % of the
+frame), all about the frame centre.
+
+It is a **one-way ramp, not an oscillation**. A sine wave reverses every minute
+or so, and that reads as the picture pumping in and out — the first version did
+exactly that, reversing 5–6 times per three minutes. Instead the camera travels
+from one end of its run to the other across the *hold* — the whole time a photo
+is up — and comes back during the cross-fade, where the whole composition is
+being replaced anyway. That is what the reference does: each photo gets its own
+push, and the reset is masked by the transition. `VintagePrints.phase(hold,
+transition)` is that ramp, and a test asserts every channel moves one direction
+from the first frame of a hold to the last.
 
 Turning a full-frame composition uncovers its corners, and creeping sideways
-uncovers an edge, so the zoom pays for both: the scale is never allowed below
-what the angle needs, and the pan is taken out of the same scale. That is also
-why the pile is drawn larger than the frame, with four big prints centred just
-outside the corners underneath the grid — the corners of a turned sheet of photos
-would otherwise show bare stage. A unit test walks two hundred seconds of drift
-and asserts the frame stays covered at every point, on 16:9 and portrait frames
-alike.
+uncovers an edge, so the zoom pays for both — and it pays for the *steepest* turn
+the drift ever reaches, not for the angle right now, because paying only for the
+current angle would make the scale dip as the turn passed through zero and climb
+again: a small pump in the zoom channel, the very thing the ramp avoids. That is
+also why the pile is drawn larger than the frame, with four big prints centred
+just outside the corners underneath the grid — the corners of a turned sheet of
+photos would otherwise show bare stage. Tests assert the frame stays covered at
+every point of the travel, on 16:9 and portrait frames alike.
 
 ### Origami
 

@@ -242,46 +242,87 @@ class VintagePrintsTest {
     // ------------------------------------------------------------------- drift
 
     @Test
+    fun `the camera never reverses while a photo is up`() {
+        // This is the pumping bug, as a test. The drift is a one-way ramp across
+        // the hold: every channel has to move the same direction from the first
+        // frame to the last, or the picture appears to breathe in and out.
+        var previous = VintagePrints.drift(0f, w, h)
+        val first = previous
+        for (i in 1..200) {
+            val now = VintagePrints.drift(i / 200f, w, h)
+            assertTrue("turn reversed at ${i / 200f}", now.angleDeg > previous.angleDeg)
+            assertTrue("zoom reversed at ${i / 200f}", now.scale > previous.scale - 1e-5f)
+            assertTrue("pan reversed at ${i / 200f}", now.dx > previous.dx)
+            assertTrue("pan reversed at ${i / 200f}", now.dy > previous.dy)
+            previous = now
+        }
+        // And it really does travel, rather than sitting still.
+        assertTrue("the turn barely moved", previous.angleDeg - first.angleDeg > 1.0f)
+        assertTrue("the zoom barely moved", previous.scale - first.scale > 0.01f)
+    }
+
+    @Test
     fun `the drift is a creep, not a bob`() {
-        // The reference drifts, so this theme drifts too - but a drift whose period
-        // approaches a slide's length is a shake, and a shake reads as a rendering
-        // fault. One second of drift must stay far below a pixel at 1080p.
-        var previous = VintagePrints.drift(0L, w, h)
-        for (ms in 1_000L..180_000L step 1_000L) {
-            val now = VintagePrints.drift(ms, w, h)
-            // The zoom follows the turn - the composition has to grow as it
-            // turns, or the corners uncover - so the scale moves with it.
-            assertTrue("scale jumped", abs(now.scale - previous.scale) < 0.008f)
-            assertTrue("turn jumped", abs(now.angleDeg - previous.angleDeg) < 0.25f)
-            assertTrue("drift jumped sideways", abs(now.dx - previous.dx) < 0.002f)
-            assertTrue("drift jumped vertically", abs(now.dy - previous.dy) < 0.002f)
+        // A ramp, not a shake: no frame-to-frame jump anywhere, at 1080p.
+        var previous = VintagePrints.drift(0f, w, h)
+        for (i in 1..200) {
+            val now = VintagePrints.drift(i / 200f, w, h)
+            assertTrue("turn jumped", abs(now.angleDeg - previous.angleDeg) < 0.05f)
+            assertTrue("scale jumped", abs(now.scale - previous.scale) < 0.002f)
+            assertTrue("pan jumped", abs(now.dx - previous.dx) < 0.001f)
             assertTrue("scale out of range: ${now.scale}", now.scale in 1f..1.10f)
             assertTrue("turn out of range: ${now.angleDeg}", abs(now.angleDeg) <= 1.25f)
-            assertTrue("offset out of range: ${now.dx}", abs(now.dx) < 0.01f)
-            assertTrue("offset out of range: ${now.dy}", abs(now.dy) < 0.01f)
             previous = now
         }
     }
 
     @Test
     fun `the drift keeps moving and never repeats inside a slide`() {
-        // A still composition would defeat the point; a repeating one inside a
-        // single hold would look like a loop.
-        val start = VintagePrints.drift(0L, w, h)
-        val middle = VintagePrints.drift(4_000L, w, h)
-        val later = VintagePrints.drift(8_000L, w, h)
+        val start = VintagePrints.drift(0f, w, h)
+        val middle = VintagePrints.drift(0.5f, w, h)
+        val later = VintagePrints.drift(1f, w, h)
         assertNotEquals(start, middle)
         assertNotEquals(middle, later)
     }
 
     @Test
-    fun `the drift actually turns the composition`() {
-        // The reference rotates the whole screen, not only pans and pushes. A
-        // drift that never leaves zero would pass every other test here.
-        val angles = (0L..40_000L step 1_000L).map { VintagePrints.drift(it, w, h).angleDeg }
-        assertTrue("never turned one way", angles.any { it > 0.5f })
-        assertTrue("never turned the other", angles.any { it < -0.5f })
-        assertTrue("turn out of range", angles.all { abs(it) <= 1.25f })
+    fun `the camera travels one way through the hold and returns during the fade`() {
+        // The reset has to land inside the cross-fade, where the whole composition
+        // is being replaced anyway; a reset during the hold would be a visible
+        // jump, and a sine wave would reverse in the middle of the hold.
+        assertEquals("the hold should start at one end", 0f, VintagePrints.phase(0f, 0f), 1e-4f)
+        assertEquals("the hold should end at the other", 1f, VintagePrints.phase(1f, 0f), 1e-4f)
+        // Continuous where the fade takes over...
+        assertEquals(1f, VintagePrints.phase(1f, 0.0001f), 0.01f)
+        // ...and back at the start by the time the fade is done.
+        assertEquals(0f, VintagePrints.phase(1f, 1f), 1e-4f)
+        // Monotonic through the hold, monotonic back through the fade.
+        var previous = VintagePrints.phase(0f, 0f)
+        for (i in 1..50) {
+            val now = VintagePrints.phase(i / 50f, 0f)
+            assertTrue("hold phase reversed at $i", now >= previous)
+            previous = now
+        }
+        previous = VintagePrints.phase(1f, 0f)
+        for (i in 1..50) {
+            val now = VintagePrints.phase(1f, i / 50f)
+            assertTrue("fade phase rose at $i", now <= previous)
+            previous = now
+        }
+    }
+
+    @Test
+    fun `the reset lands on the cross-fade, not on a settled photo`() {
+        // The two ends of the travel differ by the full range, so the moment the
+        // camera snaps back has to be a moment when the picture is changing. It is
+        // the fade: at the start of the fade the outgoing print is still whole, and
+        // by its end the arriving one is.
+        val start = VintagePrints.drift(VintagePrints.phase(1f, 0f), w, h)
+        val end = VintagePrints.drift(VintagePrints.phase(1f, 1f), w, h)
+        assertTrue("no travel to reset", abs(start.angleDeg - end.angleDeg) > 1.0f)
+        val midFade = VintagePrints.drift(VintagePrints.phase(1f, 0.5f), w, h)
+        // Halfway back, i.e. the reset is a move through the fade, not a jump.
+        assertTrue("the reset is a jump", abs(midFade.angleDeg) < abs(start.angleDeg))
     }
 
     @Test
@@ -290,24 +331,22 @@ class VintagePrintsTest {
         // composition uncovers its corners, and a bare corner of stage on this
         // theme reads as a broken render. Every corner of the frame has to stay
         // inside the turned, scaled composition.
-        for (ms in 0L..200_000L step 500L) {
-            val d = VintagePrints.drift(ms, w, h)
-            assertTrue("at ${ms}ms the frame is not covered (scale ${d.scale}, turn ${d.angleDeg})", d.covers(w, h))
+        for (i in 0..200) {
+            val d = VintagePrints.drift(i / 200f, w, h)
+            assertTrue("at $i the frame is not covered (scale ${d.scale}, turn ${d.angleDeg})", d.covers(w, h))
             val rad = Math.toRadians(d.angleDeg.toDouble())
             val cs = Math.cos(rad).toFloat()
             val sn = Math.sin(rad).toFloat()
-            // The composition's own half extents after scaling and turning.
             val hw = (w / 2f) * d.scale
             val hh = (h / 2f) * d.scale
             val spanX = abs(hw * cs) + abs(hh * sn)
             val spanY = abs(hw * sn) + abs(hh * cs)
-            // Pan must not push the composition off the frame either.
             assertTrue(
-                "at ${ms}ms the composition is off the frame sideways",
+                "at $i the composition is off the frame sideways",
                 spanX - abs(d.dx) * w >= w / 2f - 0.5f,
             )
             assertTrue(
-                "at ${ms}ms the composition is off the frame vertically",
+                "at $i the composition is off the frame vertically",
                 spanY - abs(d.dy) * h >= h / 2f - 0.5f,
             )
         }
@@ -318,9 +357,9 @@ class VintagePrintsTest {
         // The same drift has to work on a 16:10 TV panel or a portrait phone, so
         // the overscan is computed from the frame, not hard-coded for 16:9.
         for ((fw, fh) in listOf(1920f to 1080f, 1280f to 720f, 1080f to 1920f)) {
-            for (ms in 0L..120_000L step 2_000L) {
-                val d = VintagePrints.drift(ms, fw, fh)
-                assertTrue("$fw x $fh not covered at ${ms}ms", d.covers(fw, fh))
+            for (i in 0..100) {
+                val d = VintagePrints.drift(i / 100f, fw, fh)
+                assertTrue("$fw x $fh not covered at $i", d.covers(fw, fh))
             }
         }
     }

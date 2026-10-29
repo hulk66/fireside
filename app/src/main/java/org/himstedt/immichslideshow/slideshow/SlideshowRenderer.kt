@@ -688,7 +688,7 @@ object SlideshowRenderer {
         drawRect(Color(0xFF15120E))
 
         val blend = VintagePrints.blend(frame.transition)
-        val drift = VintagePrints.drift(frame.elapsedMs, w, h)
+        val drift = VintagePrints.drift(VintagePrints.phase(frame.hold, frame.transition), w, h)
         // The whole composition turns, pushes and creeps - one camera, not three
         // separate animations. The glass and the grain are drawn outside this, so
         // they stay with the lens while the pile moves underneath them.

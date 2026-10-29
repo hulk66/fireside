@@ -56,24 +56,22 @@ object VintagePrints {
     private const val AIR = 0.045f
 
     /**
-     * How far the whole composition turns, and how fast. Gentle on purpose: a
-     * few degrees over half a minute reads as a camera creeping round the table,
-     * while a few degrees over a slide reads as a wobble.
+     * How far the composition turns from one end of a hold to the other, and how
+     * far it creeps sideways.
+     *
+     * The drift is a *ramp*, not an oscillation. A sine wave reverses every minute
+     * or so, which reads as the picture pumping in and out; the reference camera
+     * simply keeps going one way for as long as a photo is up.
      */
-    private const val DRIFT_TILT = 1.2f
-
-    /** Periods in seconds - the drift is driven by a clock in seconds, not ms. */
-    private const val DRIFT_TILT_S = 46f
-    private const val DRIFT_ZOOM_S = 58f
-    private const val DRIFT_PAN_S = 70f
+    private const val DRIFT_TILT = 0.9f
+    private const val DRIFT_PAN = 0.004f
+    private const val DRIFT_ZOOM = 0.022f
 
     /** The scatter is laid on a jittered grid, so it covers rather than clumps. */
     private const val COLS = 5
     private const val ROWS = 2
 
     private const val DEG = (PI / 180.0).toFloat()
-    private const val TAU = (2.0 * PI).toFloat()
-
     private const val SALT_TILT = 1
     private const val SALT_SIZE = 2
     private const val SALT_X = 3
@@ -246,6 +244,15 @@ object VintagePrints {
         )
     }
 
+    /** How much the composition must be enlarged to stay covered when turned [deg]. */
+    fun overscanFor(deg: Float, frameW: Float, frameH: Float): Float {
+        val rad = abs(deg) * DEG
+        return maxOf(
+            cos(rad) + (frameH / frameW) * sin(rad),
+            cos(rad) + (frameW / frameH) * sin(rad),
+        )
+    }
+
     /** A slow camera drift over the whole composition. */
     data class Drift(
         /** Scale about the frame centre; never less than the turn needs. */
@@ -255,14 +262,8 @@ object VintagePrints {
         val dy: Float,
     ) {
         /** Is this drift guaranteed to leave the frame covered? */
-        fun covers(frameW: Float, frameH: Float): Boolean {
-            val rad = abs(angleDeg) * DEG
-            val need = maxOf(
-                cos(rad) + (frameH / frameW) * sin(rad),
-                cos(rad) + (frameW / frameH) * sin(rad),
-            )
-            return scale >= need
-        }
+        fun covers(frameW: Float, frameH: Float): Boolean =
+            scale >= overscanFor(angleDeg, frameW, frameH)
     }
 
     /**
@@ -271,25 +272,46 @@ object VintagePrints {
      * whose period approaches a slide's length is a bob, and a bob reads as a
      * rendering fault rather than as breathing.
      */
-    fun drift(elapsedMs: Long, frameW: Float, frameH: Float): Drift {
-        val t = elapsedMs / 1000f
-        val angle = DRIFT_TILT * sin(t * TAU / DRIFT_TILT_S)
+    /**
+     * Where the camera is on its one-way run, 0..1.
+     *
+     * It creeps from one end of its travel to the other across the *hold* — the
+     * whole time a photo is up — and comes back during the cross-fade, where the
+     * whole composition is being replaced anyway and the return is hidden. That is
+     * what the reference does: each photo gets its own push, and the reset is
+     * masked by the transition. An oscillation over a fixed period would instead
+     * reverse in the middle of a hold, which is the pumping this used to have.
+     */
+    fun phase(hold: Float, transition: Float): Float =
+        if (transition > 0f) {
+            1f - Easing.smoothstep(transition)
+        } else {
+            hold.coerceIn(0f, 1f)
+        }
+
+    fun drift(phase: Float, frameW: Float, frameH: Float): Drift {
+        val p = phase.coerceIn(0f, 1f)
+        // One-way travel: -1 at the start of the hold, +1 at its end.
+        val travel = 2f * p - 1f
+        val angle = DRIFT_TILT * travel
+        val dx = DRIFT_PAN * travel
+        val dy = DRIFT_PAN * 0.75f * travel
         // Turning the composition uncovers its corners, so the zoom and the turn
         // are one motion, not two: the scale is never allowed below what the
         // angle needs. That is also why the pile has to be drawn larger than the
         // frame - the corners of a turned sheet of photos would otherwise show
         // bare stage.
-        val rad = abs(angle) * DEG
-        val cover = maxOf(
-            cos(rad) + (frameH / frameW) * sin(rad),
-            cos(rad) + (frameW / frameH) * sin(rad),
-        )
-        val dx = 0.0045f * sin(t * TAU / DRIFT_PAN_S + 0.7f)
-        val dy = 0.0035f * sin(t * TAU / DRIFT_PAN_S + 2.1f)
+        // Overscan for the steepest turn this drift ever reaches, not for the
+        // angle right now. Paying only for the current angle would make the scale
+        // dip as the turn passed through zero and climb again - a small pump in
+        // the zoom channel, which is the very thing the ramp is here to avoid.
+        val cover = overscanFor(DRIFT_TILT, frameW, frameH)
         // Creeping sideways uncovers an edge just as turning uncovers a corner, so
         // the pan is paid for out of the same scale rather than being free.
         val pan = 1f + 2f * maxOf(abs(dx), abs(dy))
-        val breathe = 1.012f + 0.012f * sin(t * TAU / DRIFT_ZOOM_S + 0.9f)
+        // The push runs the same way as the turn: in over the hold, out again as
+        // the next photo arrives.
+        val breathe = 1f + DRIFT_ZOOM * p
         return Drift(
             scale = cover * pan * breathe,
             angleDeg = angle,
