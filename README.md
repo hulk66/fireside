@@ -138,7 +138,16 @@ panel a match, but it would also break the arithmetic that lets any moment be
 computed on its own.
 
 The direction of travel is randomised per step (deterministically, from the cycle
-and step) so a wall does not always slide the same way.
+and step) so a wall does not always slide the same way — but the exchange
+continues the way the cycle's last turn went, because randomising it separately let
+a wall finish sliding one way and then set off the other, which reads as the wall
+bouncing.
+
+The exchange slides the two walls past each other, so they are adjacent at every
+instant and the arriving wall's leading edge is visible from the first pixel of the
+slide. That is inherent to a chase: the incoming wall has to be somewhere. It is
+drawn only once the wall has actually begun to move, so nothing of the next wall
+can show while the composition is at rest.
 
 It is a `mosaic` effect, so it takes its timing from pages rather than slides — but
 its page is a *panel*, 2.5 s rather than the sixteen a dense wall needs, and the

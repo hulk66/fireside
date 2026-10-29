@@ -127,8 +127,11 @@ object SlidingPanels {
         // up for its full step rather than only for the tail of it.
         val slide = ((within - (1f - SLIDE)) / SLIDE).coerceIn(0f, 1f)
         val base = photosBefore(cycle)
-        val direction = directionFor(cycle, index)
         val exchange = index >= panels
+        // The exchange continues the way the cycle's last turn went. Randomising it
+        // separately let a wall finish sliding one way and then set off the other,
+        // which reads as the wall bouncing rather than as one movement.
+        val direction = directionFor(cycle, if (exchange) panels - 1 else index)
 
         val opening = List(panels) { k -> wrap(base + k, count) }
         val turns = turnsFor(cycle, panels, aspects)

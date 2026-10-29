@@ -707,9 +707,14 @@ object SlideshowRenderer {
                     drawGridTile(frame.bitmaps.tile(photo), leavingCells.getOrNull(slot), 1f)
                 }
             }
-            withTransform({ translate(step.direction * (p - 1f) * w, 0f) }) {
-                step.arrivingPhotos.forEachIndexed { slot, photo ->
-                    drawGridTile(frame.bitmaps.tile(photo), arrivingCells.getOrNull(slot), 1f)
+            // Only once the wall has actually begun to move. At rest the arriving
+            // wall sits exactly one frame-width away, so drawing it is pointless at
+            // best and a one-pixel seam of the next wall at worst.
+            if (p > 0.002f) {
+                withTransform({ translate(step.direction * (p - 1f) * w, 0f) }) {
+                    step.arrivingPhotos.forEachIndexed { slot, photo ->
+                        drawGridTile(frame.bitmaps.tile(photo), arrivingCells.getOrNull(slot), 1f)
+                    }
                 }
             }
             return
