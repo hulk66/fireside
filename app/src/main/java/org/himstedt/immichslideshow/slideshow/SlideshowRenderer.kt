@@ -688,10 +688,14 @@ object SlideshowRenderer {
         drawRect(Color(0xFF15120E))
 
         val blend = VintagePrints.blend(frame.transition)
-        val drift = VintagePrints.drift(frame.elapsedMs)
+        val drift = VintagePrints.drift(frame.elapsedMs, w, h)
+        // The whole composition turns, pushes and creeps - one camera, not three
+        // separate animations. The glass and the grain are drawn outside this, so
+        // they stay with the lens while the pile moves underneath them.
         withTransform({
-            scale(drift.scale, drift.scale, Offset(w / 2f, h / 2f))
             translate(drift.dx * w, drift.dy * h)
+            rotate(drift.angleDeg, Offset(w / 2f, h / 2f))
+            scale(drift.scale, drift.scale, Offset(w / 2f, h / 2f))
         }) {
             // The incoming pile fades in over the outgoing one, so the scatter
             // re-deals without either layer ever being half-drawn.

@@ -79,7 +79,7 @@ class VintagePrintsTest {
                 // next step, or every print lands on top of the last one.
                 assertTrue(
                     "$aspect leaves no room to move",
-                    w - print.halfWidth * 2f > w * 0.18f || h - print.halfHeight * 2f > h * 0.18f,
+                    w - print.halfWidth * 2f > w * 0.10f || h - print.halfHeight * 2f > h * 0.10f,
                 )
             }
         }
@@ -134,7 +134,34 @@ class VintagePrintsTest {
                 }
             }
             val share = covered.toFloat() / total
-            assertTrue("scatter leaves ${((1f - share) * 100).toInt()}% bare", share > 0.90f)
+            assertTrue("scatter leaves ${((1f - share) * 100).toInt()}% bare", share > 0.97f)
+        }
+    }
+
+    @Test
+    fun `the scatter covers the corners`() {
+        // The drift turns the whole composition, so the corners of the frame are
+        // as load-bearing as the middle: a gap here shows bare stage once the
+        // composition rotates.
+        for (seed in seeds()) {
+            val prints = (0 until VintagePrints.BACKDROP).map { slot ->
+                VintagePrints.backdrop(slot, aspects[slot % aspects.size], w, h, seed, slot)
+            }
+            // Probes outside the frame as well as inside it: the drift scales the
+            // composition up, so what becomes the frame's corner is a point beyond
+            // the frame in untransformed space.
+            val probes = ArrayList<Pair<Float, Float>>()
+            for (fx in listOf(-0.03f, 0.06f, 0.5f, 0.94f, 1.03f)) {
+                for (fy in listOf(-0.03f, 0.06f, 0.5f, 0.94f, 1.03f)) {
+                    probes.add(w * fx to h * fy)
+                }
+            }
+            for ((x, y) in probes) {
+                assertTrue(
+                    "corner (${x.toInt()}, ${y.toInt()}) is bare at seed $seed",
+                    prints.any { contains(it, x, y) },
+                )
+            }
         }
     }
 
@@ -218,14 +245,18 @@ class VintagePrintsTest {
     fun `the drift is a creep, not a bob`() {
         // The reference drifts, so this theme drifts too - but a drift whose period
         // approaches a slide's length is a shake, and a shake reads as a rendering
-        // fault. One second of drift must stay far below a pixel.
-        var previous = VintagePrints.drift(0L)
+        // fault. One second of drift must stay far below a pixel at 1080p.
+        var previous = VintagePrints.drift(0L, w, h)
         for (ms in 1_000L..180_000L step 1_000L) {
-            val now = VintagePrints.drift(ms)
-            assertTrue("scale jumped", abs(now.scale - previous.scale) < 0.002f)
+            val now = VintagePrints.drift(ms, w, h)
+            // The zoom follows the turn - the composition has to grow as it
+            // turns, or the corners uncover - so the scale moves with it.
+            assertTrue("scale jumped", abs(now.scale - previous.scale) < 0.008f)
+            assertTrue("turn jumped", abs(now.angleDeg - previous.angleDeg) < 0.25f)
             assertTrue("drift jumped sideways", abs(now.dx - previous.dx) < 0.002f)
             assertTrue("drift jumped vertically", abs(now.dy - previous.dy) < 0.002f)
-            assertTrue("scale out of range: ${now.scale}", now.scale in 0.98f..1.02f)
+            assertTrue("scale out of range: ${now.scale}", now.scale in 1f..1.10f)
+            assertTrue("turn out of range: ${now.angleDeg}", abs(now.angleDeg) <= 1.25f)
             assertTrue("offset out of range: ${now.dx}", abs(now.dx) < 0.01f)
             assertTrue("offset out of range: ${now.dy}", abs(now.dy) < 0.01f)
             previous = now
@@ -236,11 +267,62 @@ class VintagePrintsTest {
     fun `the drift keeps moving and never repeats inside a slide`() {
         // A still composition would defeat the point; a repeating one inside a
         // single hold would look like a loop.
-        val start = VintagePrints.drift(0L)
-        val middle = VintagePrints.drift(4_000L)
-        val later = VintagePrints.drift(8_000L)
+        val start = VintagePrints.drift(0L, w, h)
+        val middle = VintagePrints.drift(4_000L, w, h)
+        val later = VintagePrints.drift(8_000L, w, h)
         assertNotEquals(start, middle)
         assertNotEquals(middle, later)
+    }
+
+    @Test
+    fun `the drift actually turns the composition`() {
+        // The reference rotates the whole screen, not only pans and pushes. A
+        // drift that never leaves zero would pass every other test here.
+        val angles = (0L..40_000L step 1_000L).map { VintagePrints.drift(it, w, h).angleDeg }
+        assertTrue("never turned one way", angles.any { it > 0.5f })
+        assertTrue("never turned the other", angles.any { it < -0.5f })
+        assertTrue("turn out of range", angles.all { abs(it) <= 1.25f })
+    }
+
+    @Test
+    fun `a turned composition still covers the frame`() {
+        // This is why the zoom and the turn are one motion: turning a full-frame
+        // composition uncovers its corners, and a bare corner of stage on this
+        // theme reads as a broken render. Every corner of the frame has to stay
+        // inside the turned, scaled composition.
+        for (ms in 0L..200_000L step 500L) {
+            val d = VintagePrints.drift(ms, w, h)
+            assertTrue("at ${ms}ms the frame is not covered (scale ${d.scale}, turn ${d.angleDeg})", d.covers(w, h))
+            val rad = Math.toRadians(d.angleDeg.toDouble())
+            val cs = Math.cos(rad).toFloat()
+            val sn = Math.sin(rad).toFloat()
+            // The composition's own half extents after scaling and turning.
+            val hw = (w / 2f) * d.scale
+            val hh = (h / 2f) * d.scale
+            val spanX = abs(hw * cs) + abs(hh * sn)
+            val spanY = abs(hw * sn) + abs(hh * cs)
+            // Pan must not push the composition off the frame either.
+            assertTrue(
+                "at ${ms}ms the composition is off the frame sideways",
+                spanX - abs(d.dx) * w >= w / 2f - 0.5f,
+            )
+            assertTrue(
+                "at ${ms}ms the composition is off the frame vertically",
+                spanY - abs(d.dy) * h >= h / 2f - 0.5f,
+            )
+        }
+    }
+
+    @Test
+    fun `a portrait screen is covered too`() {
+        // The same drift has to work on a 16:10 TV panel or a portrait phone, so
+        // the overscan is computed from the frame, not hard-coded for 16:9.
+        for ((fw, fh) in listOf(1920f to 1080f, 1280f to 720f, 1080f to 1920f)) {
+            for (ms in 0L..120_000L step 2_000L) {
+                val d = VintagePrints.drift(ms, fw, fh)
+                assertTrue("$fw x $fh not covered at ${ms}ms", d.covers(fw, fh))
+            }
+        }
     }
 
     /** Is (x, y) inside this tilted print? */

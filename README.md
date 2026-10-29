@@ -129,10 +129,23 @@ fades as fast as it washes reads as a grey ghost of itself rather than as a
 photograph going white.
 
 Grain, vignette and two soft bands of light lie over everything, fixed to the
-lens rather than to the prints: the composition drifts underneath them, which is
-what makes them read as reflection rather than as paint. The drift is slow on
-purpose — periods of 150–240 s — because a drift whose period approaches a
-slide's length is a bob, and a bob reads as a rendering fault.
+lens rather than to the prints: the composition moves underneath them, which is
+what makes them read as reflection rather than as paint.
+
+That movement is a camera, not three separate animations: the whole composition
+**turns** (±1.2° over 46 s), **pushes** and **creeps** (±0.45 % of the frame over
+70 s), all about the frame centre. It is deliberately slow — a few degrees over
+half a minute reads as a camera creeping round the table, while a few degrees
+over a slide reads as a wobble.
+
+Turning a full-frame composition uncovers its corners, and creeping sideways
+uncovers an edge, so the zoom pays for both: the scale is never allowed below
+what the angle needs, and the pan is taken out of the same scale. That is also
+why the pile is drawn larger than the frame, with four big prints centred just
+outside the corners underneath the grid — the corners of a turned sheet of photos
+would otherwise show bare stage. A unit test walks two hundred seconds of drift
+and asserts the frame stays covered at every point, on 16:9 and portrait frames
+alike.
 
 ### Origami
 

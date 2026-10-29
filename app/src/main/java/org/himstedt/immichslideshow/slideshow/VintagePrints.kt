@@ -22,7 +22,11 @@ object VintagePrints {
      * below, so the grid has no hole in it: a missing cell leaves a bare patch of
      * stage showing, and the pile is the whole background.
      */
-    const val BACKDROP = 8
+    /** Corner prints, laid under the grid so the frame is always backed by paper. */
+    private const val UNDER = 4
+
+    /** Every print in the pile: the corner layer first, then the grid. */
+    const val BACKDROP = UNDER + 10
 
     /** Border around the photo, as a share of the print's width. */
     const val MARGIN = 0.014f
@@ -49,10 +53,22 @@ object VintagePrints {
     private const val WASH_MAX = 0.60f
 
     /** Air between the front print's rotated corners and the frame edge. */
-    private const val AIR = 0.035f
+    private const val AIR = 0.045f
+
+    /**
+     * How far the whole composition turns, and how fast. Gentle on purpose: a
+     * few degrees over half a minute reads as a camera creeping round the table,
+     * while a few degrees over a slide reads as a wobble.
+     */
+    private const val DRIFT_TILT = 1.2f
+
+    /** Periods in seconds - the drift is driven by a clock in seconds, not ms. */
+    private const val DRIFT_TILT_S = 46f
+    private const val DRIFT_ZOOM_S = 58f
+    private const val DRIFT_PAN_S = 70f
 
     /** The scatter is laid on a jittered grid, so it covers rather than clumps. */
-    private const val COLS = 4
+    private const val COLS = 5
     private const val ROWS = 2
 
     private const val DEG = (PI / 180.0).toFloat()
@@ -125,7 +141,7 @@ object VintagePrints {
         // fills the frame has nowhere to move, so every step lands on top of the
         // last one and the dissolve reads as a translucent overlay instead of as
         // a new print placed on the pile.
-        val photoHeight = minOf(byWidth, byHeight) * Rng.range(seed, SALT_SIZE, 0.70f, 0.90f)
+        val photoHeight = minOf(byWidth, byHeight) * Rng.range(seed, SALT_SIZE, 0.74f, 0.92f)
 
         val width = perWidth * photoHeight
         val height = perHeight * photoHeight
@@ -163,18 +179,53 @@ object VintagePrints {
         frameH: Float,
         seed: Long,
         slot: Int,
+    ): Print = if (slot < UNDER) {
+        // One print centred just outside each corner, large enough that it cannot
+        // help but cover it whatever its shape. The grid above leaves narrow gaps
+        // between neighbouring prints, and the drift turns the whole composition
+        // far enough to bring a gap at the edge into view - which showed bare
+        // stage in the corner until this layer existed.
+        val corner = slot % UNDER
+        val out = 0.02f
+        Print(
+            photoIndex = photoIndex,
+            centerX = frameW * ((if (corner == 0 || corner == 2) -out else 1f + out) +
+                Rng.range(seed, SALT_BACK + 100 + slot, -0.04f, 0.04f)),
+            centerY = frameH * ((if (corner < 2) -out else 1f + out) +
+                Rng.range(seed, SALT_BACK + 120 + slot, -0.04f, 0.04f)),
+            width = frameH * Rng.range(seed, SALT_BACK + 140 + slot, 1.05f, 1.45f) *
+                aspect.coerceIn(0.35f, 2.6f) / (1f - 2f * MARGIN),
+            height = frameH * Rng.range(seed, SALT_BACK + 140 + slot, 1.05f, 1.45f) *
+                (1f + 2f * MARGIN),
+            angleDeg = Rng.range(seed, SALT_BACK + 160 + slot, -BACK_TILT, BACK_TILT),
+            margin = 0f,
+        ).let { it.copy(margin = MARGIN * it.width) }
+    } else {
+        gridPrint(photoIndex, aspect, frameW, frameH, seed, slot - UNDER)
+    }
+
+    private fun gridPrint(
+        photoIndex: Int,
+        aspect: Float,
+        frameW: Float,
+        frameH: Float,
+        seed: Long,
+        slot: Int,
     ): Print {
         val col = slot % COLS
         val row = (slot / COLS) % ROWS
         val a = aspect.coerceIn(0.35f, 2.6f)
-        val photoHeight = frameH * Rng.range(seed, SALT_BACK + slot, 0.48f, 1.0f)
+        val photoHeight = frameH * Rng.range(seed, SALT_BACK + slot, 0.55f, 1.05f)
         val width = photoHeight * a / (1f - 2f * MARGIN)
         val margin = MARGIN * width
         val height = photoHeight + 2f * margin
         return Print(
             photoIndex = photoIndex,
-            centerX = frameW * ((col + 0.5f) / COLS + Rng.range(seed, SALT_BACK + 40 + slot, -0.12f, 0.12f)),
-            centerY = frameH * ((row + 0.5f) / ROWS + Rng.range(seed, SALT_BACK + 60 + slot, -0.18f, 0.18f)),
+            // Tight jitter: a print that wanders far from its cell leaves a gap
+            // between itself and its neighbour, and the drift turns the whole
+            // composition far enough to bring that gap into view.
+            centerX = frameW * ((col + 0.5f) / COLS + Rng.range(seed, SALT_BACK + 40 + slot, -0.09f, 0.09f)),
+            centerY = frameH * ((row + 0.5f) / ROWS + Rng.range(seed, SALT_BACK + 60 + slot, -0.14f, 0.14f)),
             width = width,
             height = height,
             angleDeg = Rng.range(seed, SALT_BACK + 80 + slot, -BACK_TILT, BACK_TILT),
@@ -195,8 +246,24 @@ object VintagePrints {
         )
     }
 
-    /** A slow camera drift: scale about the centre, plus a small offset. */
-    data class Drift(val scale: Float, val dx: Float, val dy: Float)
+    /** A slow camera drift over the whole composition. */
+    data class Drift(
+        /** Scale about the frame centre; never less than the turn needs. */
+        val scale: Float,
+        val angleDeg: Float,
+        val dx: Float,
+        val dy: Float,
+    ) {
+        /** Is this drift guaranteed to leave the frame covered? */
+        fun covers(frameW: Float, frameH: Float): Boolean {
+            val rad = abs(angleDeg) * DEG
+            val need = maxOf(
+                cos(rad) + (frameH / frameW) * sin(rad),
+                cos(rad) + (frameW / frameH) * sin(rad),
+            )
+            return scale >= need
+        }
+    }
 
     /**
      * The composition creeps very slowly, the way the reference does — a push that
@@ -204,12 +271,30 @@ object VintagePrints {
      * whose period approaches a slide's length is a bob, and a bob reads as a
      * rendering fault rather than as breathing.
      */
-    fun drift(elapsedMs: Long): Drift {
+    fun drift(elapsedMs: Long, frameW: Float, frameH: Float): Drift {
         val t = elapsedMs / 1000f
+        val angle = DRIFT_TILT * sin(t * TAU / DRIFT_TILT_S)
+        // Turning the composition uncovers its corners, so the zoom and the turn
+        // are one motion, not two: the scale is never allowed below what the
+        // angle needs. That is also why the pile has to be drawn larger than the
+        // frame - the corners of a turned sheet of photos would otherwise show
+        // bare stage.
+        val rad = abs(angle) * DEG
+        val cover = maxOf(
+            cos(rad) + (frameH / frameW) * sin(rad),
+            cos(rad) + (frameW / frameH) * sin(rad),
+        )
+        val dx = 0.0045f * sin(t * TAU / DRIFT_PAN_S + 0.7f)
+        val dy = 0.0035f * sin(t * TAU / DRIFT_PAN_S + 2.1f)
+        // Creeping sideways uncovers an edge just as turning uncovers a corner, so
+        // the pan is paid for out of the same scale rather than being free.
+        val pan = 1f + 2f * maxOf(abs(dx), abs(dy))
+        val breathe = 1.012f + 0.012f * sin(t * TAU / DRIFT_ZOOM_S + 0.9f)
         return Drift(
-            scale = 1f + 0.016f * sin(t * TAU / 150f),
-            dx = 0.005f * sin(t * TAU / 190f + 0.7f),
-            dy = 0.004f * sin(t * TAU / 240f + 1.9f),
+            scale = cover * pan * breathe,
+            angleDeg = angle,
+            dx = dx,
+            dy = dy,
         )
     }
 }
