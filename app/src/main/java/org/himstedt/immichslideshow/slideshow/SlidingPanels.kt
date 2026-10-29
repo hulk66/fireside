@@ -1,5 +1,8 @@
 package org.himstedt.immichslideshow.slideshow
 
+import kotlin.math.abs
+import kotlin.math.ln
+
 /**
  * One panel of the wall: the photo it is showing and the one sliding in.
  *
@@ -25,6 +28,12 @@ data class PanelStep(
     val slide: Float,
     /** +1 when the photos travel right, -1 when they travel left. */
     val direction: Int,
+    /**
+     * The photos the wall was *cut* from — the cycle's opening wall. The layout is
+     * built from these and never from the current contents, so a panel's cell keeps
+     * its shape while photos slide through it.
+     */
+    val opening: List<Int>,
     /** What each panel holds before this step's turn. */
     val before: List<Int>,
     /** What each panel holds after it. Equal to [before] where nothing turns. */
@@ -99,8 +108,9 @@ object SlidingPanels {
     fun directionFor(cycle: Long, index: Int): Int =
         if (Rng.unit(cycle * 31L + index, 7) < 0.5f) 1 else -1
 
-    /** The wall at [elapsedMs]. */
-    fun stepAt(elapsedMs: Long, count: Int): PanelStep {
+    /** The wall at [elapsedMs], with [aspects] used to keep each turn a similar shape. */
+    fun stepAt(elapsedMs: Long, aspects: List<Float>): PanelStep {
+        val count = aspects.size
         if (count <= 0) return emptyStep()
         val t = elapsedMs.coerceAtLeast(0L)
         val group = t / GROUP_MS
@@ -120,10 +130,13 @@ object SlidingPanels {
         val direction = directionFor(cycle, index)
         val exchange = index >= panels
 
+        val opening = List(panels) { k -> wrap(base + k, count) }
+        val turns = turnsFor(cycle, panels, aspects)
+
         if (exchange) {
             // Every panel has turned once; now the whole wall goes and the next one
             // arrives, all at once, with its own cut.
-            val leaving = List(panels) { k -> wrap(base + panels + k, count) }
+            val leaving = turns.map { it.second }
             val nextCycle = cycle + 1
             val arrivingPanels = panelsFor(nextCycle)
             val arriving = List(arrivingPanels) { k -> wrap(photosBefore(nextCycle) + k, count) }
@@ -134,6 +147,7 @@ object SlidingPanels {
                 exchange = true,
                 slide = slide,
                 direction = direction,
+                opening = opening,
                 before = leaving,
                 photos = leaving,
                 arrivingPanels = arrivingPanels,
@@ -141,8 +155,8 @@ object SlidingPanels {
             )
         }
 
-        val before = List(panels) { k -> wrap(base + k + if (k < index) panels else 0, count) }
-        val after = List(panels) { k -> wrap(base + k + if (k <= index) panels else 0, count) }
+        val before = turns.mapIndexed { slot, turn -> if (slot < index) turn.second else turn.first }
+        val after = turns.mapIndexed { slot, turn -> if (slot <= index) turn.second else turn.first }
         return PanelStep(
             cycle = cycle,
             panels = panels,
@@ -150,6 +164,7 @@ object SlidingPanels {
             exchange = false,
             slide = slide,
             direction = direction,
+            opening = opening,
             before = before,
             photos = after,
             arrivingPanels = 0,
@@ -158,19 +173,60 @@ object SlidingPanels {
     }
 
     /**
+     * Which photo each panel turns into.
+     *
+     * Each panel's turn takes, from the cycle's pool, the photo whose shape is
+     * closest to the one it is replacing — a panel showing a landscape should not
+     * suddenly receive a portrait, because the photo would then be cropped hard to
+     * fill a cell cut for something else. The pool is the cycle's second wall's
+     * worth of photos, so every photo is still used exactly once.
+     *
+     * Distance is measured on the logarithm of the aspect ratio, so 4:3 is as far
+     * from 16:9 as 3:4 is from 9:16 — the comparison is about shape, not direction.
+     */
+    fun turnsFor(cycle: Long, panels: Int, aspects: List<Float>): List<Pair<Int, Int>> {
+        val count = aspects.size
+        if (count <= 0 || panels <= 0) return emptyList()
+        val base = photosBefore(cycle)
+        val opening = List(panels) { k -> wrap(base + k, count) }
+        val pool = List(panels) { k -> wrap(base + panels + k, count) }
+        val taken = HashSet<Int>()
+        return opening.map { from ->
+            val target = shapeOf(aspects, from)
+            var best = -1
+            var bestDistance = Float.MAX_VALUE
+            pool.indices.forEach { i ->
+                if (i in taken) return@forEach
+                val distance = abs(ln(shapeOf(aspects, pool[i])) - ln(target))
+                // Ties go to the earlier photo, so the choice is deterministic.
+                if (distance < bestDistance - 1e-6f) {
+                    bestDistance = distance
+                    best = i
+                }
+            }
+            val chosen = if (best >= 0) best else pool.indices.first { it !in taken }
+            taken.add(chosen)
+            from to pool[chosen]
+        }
+    }
+
+    private fun shapeOf(aspects: List<Float>, index: Int): Float =
+        (aspects.getOrNull(index) ?: 1.5f).coerceIn(0.25f, 4f)
+
+    /**
      * Photos the player must keep decoded: this step and the next, which covers
      * both photos of a turning panel and both walls of an exchange.
      */
-    fun prefetch(elapsedMs: Long, count: Int): List<Int> {
-        if (count <= 0) return emptyList()
+    fun prefetch(elapsedMs: Long, aspects: List<Float>): List<Int> {
+        if (aspects.isEmpty()) return emptyList()
         val indices = LinkedHashSet<Int>()
-        val step = stepAt(elapsedMs, count)
+        val step = stepAt(elapsedMs, aspects)
         indices.addAll(step.before)
         indices.addAll(step.photos)
         if (step.exchange) indices.addAll(step.arrivingPhotos)
         // The step after this one: a slide is only smooth if the photo it brings in
         // is already decoded when it starts.
-        val next = stepAt(elapsedMs + STEP_MS, count)
+        val next = stepAt(elapsedMs + STEP_MS, aspects)
         indices.addAll(next.before)
         indices.addAll(next.photos)
         return indices.toList()
@@ -185,6 +241,7 @@ object SlidingPanels {
         exchange = false,
         slide = 0f,
         direction = 1,
+        opening = emptyList(),
         before = emptyList(),
         photos = emptyList(),
         arrivingPanels = 0,

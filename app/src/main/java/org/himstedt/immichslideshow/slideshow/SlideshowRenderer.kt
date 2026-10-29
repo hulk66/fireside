@@ -686,7 +686,7 @@ object SlideshowRenderer {
         // this is the seam colour rather than a gap.
         drawRect(Color(0xFF0B0D12))
 
-        val step = SlidingPanels.stepAt(frame.elapsedMs, frame.count)
+        val step = SlidingPanels.stepAt(frame.elapsedMs, frame.photos.map { it.aspectRatio ?: 1.5f })
         if (step.before.isEmpty()) {
             drawPlaceholder()
             return
@@ -698,7 +698,9 @@ object SlideshowRenderer {
             // The whole wall goes and the next arrives, both travelling the same
             // way and adjacent at every instant - so the exchange reads as one
             // sheet of panels passing rather than as a cross-fade.
-            val leavingCells = justifiedCells(frame, step.before, w, h, gap)
+            // Both walls are cut from their *opening* photos: the layout is a
+            // property of the cycle, not of what happens to be sliding through it.
+            val leavingCells = justifiedCells(frame, step.opening, w, h, gap)
             val arrivingCells = justifiedCells(frame, step.arrivingPhotos, w, h, gap)
             withTransform({ translate(step.direction * p * w, 0f) }) {
                 step.before.forEachIndexed { slot, photo ->
@@ -713,7 +715,9 @@ object SlideshowRenderer {
             return
         }
 
-        val cells = justifiedCells(frame, step.before, w, h, gap)
+        // Cut once per cycle, from the opening photos. Cutting from the current
+        // contents re-arranged the whole wall every time a single panel slid.
+        val cells = justifiedCells(frame, step.opening, w, h, gap)
         step.before.forEachIndexed { slot, fromPhoto ->
             val cell = cells.getOrNull(slot) ?: return@forEachIndexed
             val toPhoto = step.photos.getOrNull(slot) ?: fromPhoto

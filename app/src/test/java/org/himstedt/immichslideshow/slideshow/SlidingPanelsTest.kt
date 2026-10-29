@@ -1,5 +1,7 @@
 package org.himstedt.immichslideshow.slideshow
 
+import kotlin.math.abs
+import kotlin.math.ln
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -14,7 +16,18 @@ class SlidingPanelsTest {
 
     private val count = 40
 
-    private fun stepAt(ms: Long) = SlidingPanels.stepAt(ms, count)
+    /** A mix of shapes, as an album would have. */
+    private val aspects: List<Float> = List(count) { i ->
+        when (i % 5) {
+            0 -> 1.5f
+            1 -> 0.66f
+            2 -> 1.78f
+            3 -> 1.0f
+            else -> 2.4f
+        }
+    }
+
+    private fun stepAt(ms: Long) = SlidingPanels.stepAt(ms, aspects)
 
     /** The first moment of every step of [cycle]. */
     private fun stepsOf(cycle: Long): List<PanelStep> {
@@ -160,6 +173,66 @@ class SlidingPanelsTest {
     }
 
     @Test
+    fun `the wall is cut once per cycle and never re-cut`() {
+        // The bug this guards: cutting the layout from the *current* photos meant
+        // every single-panel slide re-arranged the whole wall. The layout is cut
+        // from the cycle's opening photos, so it cannot move.
+        for (cycle in 0L..4L) {
+            val steps = stepsOf(cycle)
+            val opening = steps.first().opening
+            assertEquals("the opening wall should be as wide as the wall", SlidingPanels.panelsFor(cycle), opening.size)
+            steps.forEach { step ->
+                assertEquals("the layout changed inside cycle $cycle", opening, step.opening)
+            }
+        }
+    }
+
+    @Test
+    fun `a turning panel takes the closest shape still available`() {
+        // A panel cut for a landscape should not receive a portrait, or the photo
+        // is cropped hard to fill a cell cut for something else. Checked against an
+        // independent greedy walk: each turn, in slot order, takes the nearest shape
+        // of those not already taken.
+        for (cycle in 0L..3L) {
+            val panels = SlidingPanels.panelsFor(cycle)
+            val turns = SlidingPanels.turnsFor(cycle, panels, aspects)
+            assertEquals(panels, turns.size)
+            val opening = turns.map { it.first }
+            val pool = turns.map { it.second }
+            // Every pool photo is used exactly once, and none of them is an opening
+            // photo.
+            assertEquals("a pool photo was used twice", pool.size, pool.toSet().size)
+            assertTrue("a pool photo is also on the opening wall", opening.intersect(pool.toSet()).isEmpty())
+
+            val taken = HashSet<Int>()
+            for ((slot, turn) in turns.withIndex()) {
+                val target = aspects[turn.first]
+                val remaining = pool.indices.filter { it !in taken }
+                val nearest = remaining.minOf { abs(ln(aspects[pool[it]]) - ln(target)) }
+                val chosen = abs(ln(aspects[turn.second]) - ln(target))
+                assertEquals("panel $slot of cycle $cycle took a poor shape", nearest, chosen, 0.001f)
+                taken.add(pool.indexOf(turn.second))
+            }
+        }
+    }
+
+    @Test
+    fun `a similar shape is preferred to album order`() {
+        // Deliberately ordered so that plain album order would hand a panel the
+        // wrong shape: the pool's first photo is a tall portrait while the panels
+        // are wide landscapes.
+        val shapes = listOf(1.78f, 1.78f, 1.78f, 0.55f, 1.75f, 1.70f)
+        val turns = SlidingPanels.turnsFor(0L, 3, shapes)
+        // The first two panels take the wide photos from the pool rather than the
+        // portrait that comes first in album order...
+        assertTrue("panel 0 took the portrait", shapes[turns[0].second] > 1.5f)
+        assertTrue("panel 1 took the portrait", shapes[turns[1].second] > 1.5f)
+        // ...and the last panel takes what is left, because the pool holds exactly
+        // one photo per panel: there is nothing left to choose from.
+        assertEquals(0.55f, shapes[turns[2].second], 0.01f)
+    }
+
+    @Test
     fun `the direction is a real direction and it varies`() {
         val directions = (0L..11L).map { SlidingPanels.directionFor(it, 0) }.toSet()
         assertEquals("both ways should be used", setOf(-1, 1), directions)
@@ -186,8 +259,9 @@ class SlidingPanelsTest {
         // Fewer photos than panels is the awkward case: the wall has to wrap
         // several times inside one step.
         for (album in listOf(1, 2, 3, 5, 7)) {
+            val small = List(album) { 1.5f }
             for (ms in 0L..60_000L step 700L) {
-                val step = SlidingPanels.stepAt(ms, album)
+                val step = SlidingPanels.stepAt(ms, small)
                 for (photo in step.before + step.photos + step.arrivingPhotos) {
                     assertTrue("photo $photo outside 0..<$album", photo in 0 until album)
                 }
@@ -197,23 +271,23 @@ class SlidingPanelsTest {
 
     @Test
     fun `an empty album has no panels`() {
-        val step = SlidingPanels.stepAt(5_000L, 0)
+        val step = SlidingPanels.stepAt(5_000L, emptyList())
         assertTrue(step.before.isEmpty())
         assertFalse(step.exchange)
-        assertTrue(SlidingPanels.prefetch(5_000L, 0).isEmpty())
+        assertTrue(SlidingPanels.prefetch(5_000L, emptyList()).isEmpty())
     }
 
     @Test
     fun `prefetch covers both photos of a turning panel`() {
         for (ms in 0L..120_000L step 300L) {
             val step = stepAt(ms)
-            val wanted = SlidingPanels.prefetch(ms, count)
+            val wanted = SlidingPanels.prefetch(ms, aspects)
             for (photo in step.before + step.photos + step.arrivingPhotos) {
                 assertTrue("at ${ms}ms the panel photo $photo is not prefetched", photo in wanted)
             }
             // The step after this one, so the arriving photo is decoded before the
             // slide starts.
-            val next = SlidingPanels.stepAt(ms + SlidingPanels.STEP_MS, count)
+            val next = SlidingPanels.stepAt(ms + SlidingPanels.STEP_MS, aspects)
             for (photo in next.before + next.photos) {
                 assertTrue("at ${ms}ms the next step's photo $photo is not prefetched", photo in wanted)
             }

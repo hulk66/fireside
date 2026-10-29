@@ -145,7 +145,8 @@ class SlideshowController(
             if (prefs.effect == SlideshowEffect.SLIDING_PANELS) {
                 // Panels run on their own clock, a couple of seconds each, and the
                 // window is the panels either side of now rather than a page.
-                for (i in SlidingPanels.prefetch(elapsedMs, ordered.size)) request(i, tile = true)
+                val aspects = ordered.map { it.aspectRatio ?: 1.5f }
+                for (i in SlidingPanels.prefetch(elapsedMs, aspects)) request(i, tile = true)
                 return
             }
             val slots = GridPlan.slotsForEffect(prefs.effect, gridSlots)

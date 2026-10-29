@@ -122,10 +122,23 @@ opens with the first *n* photos, each panel's turn brings in the photo *n* place
 further on, and the exchange brings in the next cycle's opening photos. So every
 photo is shown exactly once per pass through the album.
 
-The layout is cut per cycle from that cycle's opening photos, so panels keep their
-places while their contents slide; the photos are cropped to fill their panel. The
-direction of travel is randomised per step (deterministically, from the cycle and
-step) so a wall does not always slide the same way.
+The layout is cut **once per cycle**, from that cycle's opening photos — never from
+the current contents. That distinction is the whole point: cutting from the current
+photos re-arranged the entire wall every time a single panel slid, which made a
+one-panel change look like a new wall. Panels keep their cells for the cycle, and
+photos are cropped to fill them.
+
+Each turn also takes the photo whose **shape** is closest to the one it replaces,
+measured on the logarithm of the aspect ratio so 4:3 is as far from 16:9 as 3:4 is
+from 9:16. A panel cut for a landscape should not suddenly receive a portrait, or
+the photo is cropped hard to fill a cell cut for something else. The choice is
+greedy in slot order over the cycle's pool, which is exactly one photo per panel —
+so the last panel sometimes has to take what is left; a wider pool would give every
+panel a match, but it would also break the arithmetic that lets any moment be
+computed on its own.
+
+The direction of travel is randomised per step (deterministically, from the cycle
+and step) so a wall does not always slide the same way.
 
 It is a `mosaic` effect, so it takes its timing from pages rather than slides — but
 its page is a *panel*, 2.5 s rather than the sixteen a dense wall needs, and the
