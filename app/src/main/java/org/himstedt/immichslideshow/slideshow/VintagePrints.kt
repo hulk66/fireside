@@ -352,10 +352,23 @@ object VintagePrints {
     fun phase(hold: Float, transition: Float): Float =
         if (transition > 0f) 1f else hold.coerceIn(0f, 1f)
 
-    fun drift(phase: Float, frameW: Float, frameH: Float): Drift {
+    /**
+     * Which way this photo's camera travels: +1 or -1, alternating down the album.
+     *
+     * Every photo turning the same way made the theme feel like a turntable. With
+     * the direction alternating, one photo turns clockwise and the next
+     * anticlockwise — and because the travel runs end to end, the framing a photo
+     * finishes on is exactly the framing the next one starts on, so the cross-fade
+     * between them is a pure dissolve with no shift in framing at all.
+     */
+    fun directionFor(index: Int): Float = if (Math.floorMod(index, 2) == 0) 1f else -1f
+
+    fun drift(phase: Float, frameW: Float, frameH: Float, direction: Float = 1f): Drift {
         val p = phase.coerceIn(0f, 1f)
-        // One-way travel: -1 at the start of the hold, +1 at its end.
-        val travel = 2f * p - 1f
+        val dir = if (direction < 0f) -1f else 1f
+        // One-way travel for this photo: -1 at the start of its hold, +1 at its
+        // end. The direction decides which end of the run that is.
+        val travel = dir * (2f * p - 1f)
         val angle = DRIFT_TILT * travel
         val dx = DRIFT_PAN * travel
         val dy = DRIFT_PAN * 0.75f * travel
@@ -372,9 +385,9 @@ object VintagePrints {
         // Creeping sideways uncovers an edge just as turning uncovers a corner, so
         // the pan is paid for out of the same scale rather than being free.
         val pan = 1f + 2f * maxOf(abs(dx), abs(dy))
-        // The push runs the same way as the turn: in over the hold, out again as
-        // the next photo arrives.
-        val breathe = 1f + DRIFT_ZOOM * p
+        // The push runs the same way as the turn: a photo either pushes in over
+        // its hold or pulls out, and the next one takes over where it stopped.
+        val breathe = 1f + DRIFT_ZOOM * (if (dir > 0f) p else 1f - p)
         return Drift(
             scale = cover * pan * breathe,
             angleDeg = angle,

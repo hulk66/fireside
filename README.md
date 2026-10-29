@@ -156,11 +156,18 @@ next hold set off the other way.
 What works is **one camera per photo**. A photo creeps from one end of its run to
 the other across its hold and then *stops*, holding that framing while it fades
 out. The photo arriving is a different print with a camera of its own, starting at
-the beginning of its own run, and the cross-fade bridges the two framings. Nothing
-reverses at any point, in the hold or in the fade, and nothing jumps either: both
-ends of the fade are continuous by construction. `VintagePrints.phase(hold,
-transition)` is the ramp, frozen through the fade, and tests walk a whole cycle
-asserting the camera never turns round.
+the beginning of its own run. Nothing reverses at any point, in the hold or in the
+fade, and nothing jumps either. `VintagePrints.phase(hold, transition)` is the
+ramp, frozen through the fade, and tests walk a whole cycle asserting the camera
+never turns round.
+
+The **direction alternates from photo to photo** (`directionFor`, by index): one
+print turns clockwise and pushes in, the next turns anticlockwise and pulls out.
+Every photo turning the same way made the theme feel like a turntable. Because the
+travel runs end to end and the direction alternates, the framing a photo finishes
+on is *exactly* the framing the next one starts on, so the cross-fade between them
+is a pure dissolve with no shift in framing at all — a test asserts that handover
+to within a thousandth of a degree.
 
 Turning a full-frame composition uncovers its corners, and creeping sideways
 uncovers an edge, so the zoom pays for both — and it pays for the *steepest* turn

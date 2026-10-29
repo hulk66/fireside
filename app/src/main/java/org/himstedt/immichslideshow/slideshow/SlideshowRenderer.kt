@@ -697,7 +697,12 @@ object SlideshowRenderer {
         // where it started somehow, and the only moment available is the fade, so
         // the picture visibly swings back over the transition and forward again
         // after it. Two cameras need no return: nothing reverses, ever.
-        val leaving = VintagePrints.drift(VintagePrints.phase(frame.hold, frame.transition), w, h)
+        val leaving = VintagePrints.drift(
+            phase = VintagePrints.phase(frame.hold, frame.transition),
+            frameW = w,
+            frameH = h,
+            direction = VintagePrints.directionFor(frame.currentIndex),
+        )
         camera(leaving, w, h) {
             drawPrintScatter(frame, frame.currentIndex, w, h, 1f)
             if (blend.outgoing > 0.01f) {
@@ -708,7 +713,12 @@ object SlideshowRenderer {
         if (blend.incoming > 0.01f) {
             // The arriving photo starts at the beginning of its own run and holds
             // there until its hold begins; its travel starts then.
-            val arriving = VintagePrints.drift(0f, w, h)
+            val arriving = VintagePrints.drift(
+                phase = 0f,
+                frameW = w,
+                frameH = h,
+                direction = VintagePrints.directionFor(frame.nextIndex),
+            )
             camera(arriving, w, h) {
                 drawPrintScatter(frame, frame.nextIndex, w, h, blend.incoming)
                 drawFrontPrint(frame, frame.nextIndex, w, h, blend.incoming, 0f)

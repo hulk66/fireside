@@ -320,13 +320,42 @@ class VintagePrintsTest {
     fun `the arriving photo starts its own run at the beginning`() {
         // The incoming composition is drawn at phase 0 for the whole fade, so its
         // own hold can start from there without a jump.
-        val arriving = VintagePrints.drift(0f, w, h)
-        val firstFrameOfItsHold = VintagePrints.drift(VintagePrints.phase(0f, 0f), w, h)
+        val arriving = VintagePrints.drift(0f, w, h, VintagePrints.directionFor(1))
+        val firstFrameOfItsHold =
+            VintagePrints.drift(VintagePrints.phase(0f, 0f), w, h, VintagePrints.directionFor(1))
         assertEquals(arriving, firstFrameOfItsHold)
-        // And the two framings really are different, or the fade would bridge
-        // nothing and the print would appear to jump into its end state.
-        val leaving = VintagePrints.drift(VintagePrints.phase(1f, 0.5f), w, h)
-        assertTrue("the two framings are the same", abs(leaving.angleDeg - arriving.angleDeg) > 1f)
+    }
+
+    @Test
+    fun `the direction alternates from photo to photo`() {
+        // Every photo turning the same way made it feel like a turntable.
+        val directions = (0..5).map { VintagePrints.directionFor(it) }
+        assertEquals(listOf(1f, -1f, 1f, -1f, 1f, -1f), directions)
+
+        // One photo turns one way across its hold, the next the other way.
+        val first = VintagePrints.drift(1f, w, h, VintagePrints.directionFor(0)).angleDeg -
+            VintagePrints.drift(0f, w, h, VintagePrints.directionFor(0)).angleDeg
+        val second = VintagePrints.drift(1f, w, h, VintagePrints.directionFor(1)).angleDeg -
+            VintagePrints.drift(0f, w, h, VintagePrints.directionFor(1)).angleDeg
+        assertTrue("the first photo should turn one way", abs(first) > 1f)
+        assertTrue("the second photo should turn the other way", first * second < 0f)
+    }
+
+    @Test
+    fun `each photo hands over to the next without a shift in framing`() {
+        // Because the travel runs end to end and the direction alternates, the
+        // framing a photo finishes on is exactly the framing the next one starts
+        // on - so the cross-fade between them is a pure dissolve, with the print
+        // not shifting as the photo changes.
+        for (index in 0..7) {
+            val next = index + 1
+            val leaving = VintagePrints.drift(1f, w, h, VintagePrints.directionFor(index))
+            val arriving = VintagePrints.drift(0f, w, h, VintagePrints.directionFor(next))
+            assertEquals("turn shifts at photo $index", leaving.angleDeg, arriving.angleDeg, 1e-3f)
+            assertEquals("scale shifts at photo $index", leaving.scale, arriving.scale, 1e-4f)
+            assertEquals("pan shifts at photo $index", leaving.dx, arriving.dx, 1e-4f)
+            assertEquals("pan shifts at photo $index", leaving.dy, arriving.dy, 1e-4f)
+        }
     }
 
     @Test
