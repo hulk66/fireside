@@ -159,7 +159,7 @@ fun SetupScreen(
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = "Photos stream straight from your own Immich server. " +
-                        "Pick an album, then let one of ten photo themes play.",
+                        "Pick an album, then let one of twelve photo themes play.",
                     color = Palette.Muted,
                     fontSize = 16.sp,
                     lineHeight = 23.sp,

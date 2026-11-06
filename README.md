@@ -2,11 +2,31 @@
 
 A native Android TV / Fire OS app that streams albums from a self-hosted
 [Immich](https://immich.app) server and plays them back as ambient slideshows in
-ten different styles, in the spirit of the classic Apple TV screensavers.
+twelve different styles, in the spirit of the classic Apple TV screensavers.
 
 Built with Kotlin, Jetpack Compose for TV and a hand-written `DrawScope`
 renderer, so every theme is a pure function of time — the same code paints the
 full-screen show and the animated thumbnails in the theme picker.
+
+---
+
+## Screenshots
+
+Every shot below is the real app on a Fire TV emulator, running the built-in
+demo library — so nothing here needs a server to reproduce.
+
+| | |
+|---|---|
+| ![Connect your server](docs/screenshots/01-setup.jpg) | ![Choose an album](docs/screenshots/02-albums.jpg) |
+| **Connect** — server URL and API key, or one tap into the demo library | **Album browser** — covers, photo counts and years straight from Immich |
+| ![Photo themes](docs/screenshots/03-theme-picker.jpg) | ![Ken Burns](docs/screenshots/04-ken-burns.jpg) |
+| **Theme picker** — every tile is the real renderer, animating | **Ken Burns** — a roving pan and zoom across every frame |
+| ![Sliding Panels](docs/screenshots/05-sliding-panels.jpg) | ![Reflections](docs/screenshots/06-reflections.jpg) |
+| **Sliding Panels** — a photo slides out as the next arrives | **Reflections** — a collage on a bright stage, with its mirrored echo |
+| ![Scrapbook](docs/screenshots/07-scrapbook.jpg) | ![Vintage Prints](docs/screenshots/08-vintage-prints.jpg) |
+| **Scrapbook** — polaroids settle onto a paper desk | **Vintage Prints** — one print on a pile of others, under glass |
+| ![Origami](docs/screenshots/09-origami.jpg) | ![Photo Grid](docs/screenshots/10-photo-grid.jpg) |
+| **Origami** — a wall of photos turning over like sheets of paper | **Photo Grid** — a justified mosaic of the whole album |
 
 ---
 
