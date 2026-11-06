@@ -139,10 +139,10 @@ fun SetupScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1.12f)) {
-                ImmichMark()
+                FiresideMark()
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    text = "IMMICH · FIRE TV",
+                    text = "FIRESIDE · FIRE TV",
                     color = Palette.Amber,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
@@ -377,7 +377,7 @@ private fun TvTextField(
 
 /** Simple aperture mark, drawn with vectors so there is no bitmap asset. */
 @Composable
-private fun ImmichMark() {
+private fun FiresideMark() {
     androidx.compose.foundation.Canvas(Modifier.width(64.dp).height(64.dp)) {
         val r = size.minDimension / 2f
         val center = Offset(size.width / 2f, size.height / 2f)
