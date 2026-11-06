@@ -66,6 +66,9 @@ class ImmichConfigTest {
 
     @Test
     fun `the key hint shows only the tail`() {
+        // A deliberately fake key: this test only cares about the tail. Never put
+        // a live credential in a fixture - it lands in git history and cannot be
+        // taken back out of a clone, a backup or a transcript.
         val config = ImmichConfig("https://photos.example.org", "EXAMPLE-TEST-KEY-not-a-real-credential-u5DQ")
         assertEquals("API key ••••u5DQ", config.keyHint())
         assertEquals("API key ••••", ImmichConfig("https://x.org", "abc").keyHint())
