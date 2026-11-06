@@ -2,6 +2,7 @@ package org.himstedt.fireside.data
 
 import org.himstedt.fireside.BuildConfig
 import kotlinx.serialization.json.Json
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -28,7 +29,8 @@ class ImmichRepository(
     private val config: ImmichConfig,
     client: OkHttpClient? = null,
 ) {
-    private val okHttp: OkHttpClient = client ?: defaultClient()
+    /** Visible for tests: the client this repository actually sends with. */
+    internal val okHttp: OkHttpClient = authenticatedClient(client ?: baseClient()) { config.apiKey }
 
     private val json = Json {
         // Without this, kotlinx omits fields that equal their default and the
@@ -118,7 +120,7 @@ class ImmichRepository(
     fun originalUrl(assetId: String): String =
         "${config.normalizedBaseUrl()}api/assets/$assetId/original"
 
-    private fun defaultClient(): OkHttpClient {
+    private fun baseClient(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
             else HttpLoggingInterceptor.Level.NONE
@@ -126,14 +128,6 @@ class ImmichRepository(
         return OkHttpClient.Builder()
             .connectTimeout(7, TimeUnit.SECONDS)
             .readTimeout(25, TimeUnit.SECONDS)
-            .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
-                        .header("x-api-key", config.apiKey)
-                        .header("Accept", "application/json")
-                        .build(),
-                )
-            }
             .addInterceptor(logging)
             .build()
     }
@@ -233,6 +227,34 @@ private const val MAX_ALBUM_PHOTOS = 5_000
 
 /** How many albums' photo lists to keep memoised. */
 private const val PHOTO_CACHE_ALBUMS = 8
+
+/**
+ * Wraps a shared client with the credential of whoever is going to use it.
+ *
+ * The key belongs to the caller, not to the process: a repository is built from
+ * one [ImmichConfig] and must authenticate with that config's key. Reading a
+ * process-wide key instead is what broke first-run setup — the key is only
+ * published once a config has been *saved*, but saving happens after the test
+ * call that needs it, so the first request went out with no `x-api-key` at all
+ * and Immich answered 401 "Authentication required".
+ *
+ * The interceptor sits last in the chain, closest to the wire: the request that
+ * leaves the process carries the key, and the key never lands in the debug log
+ * of the interceptors ahead of it.
+ */
+internal fun authenticatedClient(base: OkHttpClient, apiKey: () -> String): OkHttpClient =
+    base.newBuilder()
+        .addInterceptor(
+            Interceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("x-api-key", apiKey())
+                        .header("Accept", "application/json")
+                        .build(),
+                )
+            },
+        )
+        .build()
 
 class ImmichException(
     message: String,

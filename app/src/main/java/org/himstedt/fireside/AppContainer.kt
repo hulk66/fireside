@@ -10,6 +10,7 @@ import org.himstedt.fireside.data.ImmichConfig
 import org.himstedt.fireside.data.ImmichRepository
 import org.himstedt.fireside.data.PhotoBitmapSource
 import org.himstedt.fireside.data.SettingsStore
+import org.himstedt.fireside.data.authenticatedClient
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -26,7 +27,12 @@ class SlideshowApplication : Application() {
 /**
  * Small hand-rolled dependency container. One process-wide OkHttp client and
  * Coil loader keep the connection pool warm while the Immich URL/API key can
- * still change at runtime (the auth interceptor reads [AuthProvider]).
+ * still change at runtime.
+ *
+ * The client itself carries no credential: the key is attached per consumer.
+ * Repositories authenticate from their own [ImmichConfig]; Coil is built before
+ * any config exists, so it reads [AuthProvider], which is published whenever a
+ * config is saved.
  */
 class AppContainer(context: Context) {
 
@@ -39,21 +45,12 @@ class AppContainer(context: Context) {
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .addInterceptor { chain ->
-                val key = AuthProvider.apiKey
-                val request = if (key.isBlank()) {
-                    chain.request()
-                } else {
-                    chain.request().newBuilder().header("x-api-key", key).build()
-                }
-                chain.proceed(request)
-            }
             .build()
     }
 
     val imageLoader: ImageLoader by lazy {
         ImageLoader.Builder(appContext)
-            .okHttpClient { httpClient }
+            .okHttpClient { authenticatedClient(httpClient) { AuthProvider.apiKey } }
             .crossfade(160)
             .respectCacheHeaders(false)
             .build()
