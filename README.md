@@ -8,6 +8,20 @@ Built with Kotlin, Jetpack Compose for TV and a hand-written `DrawScope`
 renderer, so every theme is a pure function of time — the same code paints the
 full-screen show and the animated thumbnails in the theme picker.
 
+## How this was built
+
+Fireside was written entirely by **DeepSeek 4.1 Flash**, running locally on two
+NVIDIA DGX Spark machines. The setup follows Jayleaton's
+[deepseek-v41-tensorfold-spark](https://github.com/jayleaton/deepseek-v41-tensorfold-spark)
+recipe, and the work was driven through the **PI coding harness**.
+
+The slideshow was never the point. This was a test of what a local model can do
+on a genuinely non-trivial development task: a real Android app with a
+hand-written `DrawScope` renderer, twelve effects, an Immich REST client,
+persistence, 205 unit tests and a signed release pipeline. Everything in the
+commit history — including the bugs that only surfaced on a device — came out
+of that setup.
+
 ---
 
 ## Screenshots
