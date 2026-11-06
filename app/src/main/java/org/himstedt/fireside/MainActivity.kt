@@ -69,11 +69,22 @@ internal object IntentConfig {
 
     fun read(intent: Intent?): ImmichConfig? {
         if (intent == null) return null
-        if (intent.getBooleanExtra(EXTRA_DEMO, false)) return ImmichConfig.Demo
+        if (isDemoFlag(intent.extras?.get(EXTRA_DEMO))) return ImmichConfig.Demo
 
         val url = intent.getStringExtra(EXTRA_URL) ?: intent.getStringExtra(EXTRA_URL_ALT)
         val key = intent.getStringExtra(EXTRA_API_KEY)
         if (url.isNullOrBlank() || key.isNullOrBlank()) return null
         return ImmichConfig(baseUrl = url, apiKey = key).sanitized()
     }
+}
+
+/**
+ * `adb shell am start -e demo true` delivers the flag as a String, while
+ * `--ez demo true` delivers a Boolean. Both mean the same thing; reading only
+ * the boolean form silently ignored the spelling the README documents.
+ */
+internal fun isDemoFlag(raw: Any?): Boolean = when (raw) {
+    is Boolean -> raw
+    is String -> raw.trim().equals("true", ignoreCase = true) || raw.trim() == "1"
+    else -> false
 }

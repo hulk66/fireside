@@ -81,9 +81,10 @@ adb shell am start -n org.himstedt.fireside/.MainActivity \
   -e immich_api_key "XXXXXXXXXXXXXXXXXXXXXXXX"
 ```
 
-Add `-e demo true` to jump straight into the generated demo library. The
-`immich_base_url` / `immich_url` keys are both accepted; the URL may be given
-with or without a scheme or a trailing `/api`.
+Add `-e demo true` (or `--ez demo true`) to jump straight into the generated
+demo library — both spellings are accepted. The `immich_base_url` / `immich_url`
+keys are both accepted; the URL may be given with or without a scheme or a
+trailing `/api`.
 
 ## Using it
 
