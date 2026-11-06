@@ -67,11 +67,48 @@ demo library — so nothing here needs a server to reproduce.
 
 ## Build & install
 
+### Install a release
+
+Every `v*` tag is built and signed by CI and published as a GitHub Release, so
+there is nothing to compile:
+
+```bash
+curl -L -o fireside.apk \
+  https://github.com/hulk66/fireside/releases/latest/download/fireside.apk
+adb connect <fire-tv-ip>:5555          # if not already paired
+adb install -r fireside.apk
+```
+
+Every release is signed with the same key, so `adb install -r` upgrades in place
+rather than demanding an uninstall. The asset name is deliberately stable: that
+is what makes the `latest/download/...` URL keep working.
+
+### Build from source
+
 ```bash
 ./gradlew :app:assembleDebug
 adb connect <fire-tv-ip>:5555          # if not already paired
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The debug APK is signed with your machine's debug key, so it will not upgrade
+over a release APK. Switching between the two needs
+`adb uninstall org.himstedt.fireside` first.
+
+### Making a release
+
+Versioning is driven entirely by the tag:
+
+```bash
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+CI derives `versionName` (`1.1.0`) and `versionCode`
+(`major * 10000 + minor * 100 + patch`, so `10100`) from it, then builds, signs
+and publishes the APK. Android only accepts an upgrade whose `versionCode` is
+higher than the installed one, and this scheme guarantees that for as long as
+the tag increases.
 
 On the TV the app appears in **Your Apps → All Apps** (leanback launcher icon
 and banner are included). To launch it from a shell:

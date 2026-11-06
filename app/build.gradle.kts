@@ -13,13 +13,30 @@ android {
         applicationId = "org.himstedt.fireside"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Both numbers come from the release tag (see .github/workflows/android.yml):
+        // versionCode = major * 10000 + minor * 100 + patch. The defaults keep
+        // `./gradlew assembleRelease` working with no arguments.
+        versionCode = providers.gradleProperty("versionCode").orNull?.toInt() ?: 10000
+        versionName = providers.gradleProperty("versionName").orNull ?: "1.0.0"
     }
 
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    signingConfigs {
+        // CI decodes the keystore from a repository secret into $RUNNER_TEMP and
+        // points ANDROID_KEYSTORE_PATH at it. Without that, local builds fall back
+        // to the debug key below, which is fine for your own sideloading but not
+        // for a release other people install: the debug key is regenerated per
+        // machine, so an upgrade would be refused as a signature mismatch.
+        create("release") {
+            System.getenv("ANDROID_KEYSTORE_PATH")?.let { storeFile = file(it) }
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+        }
     }
 
     buildTypes {
@@ -34,8 +51,14 @@ android {
                 "proguard-rules.pro",
             )
             // Sideloaded Fire TV builds are commonly distributed as debug-signed
-            // APKs; `./gradlew assembleDebug` is the recommended artifact.
-            signingConfig = signingConfigs.getByName("debug")
+            // APKs; `./gradlew assembleDebug` is the recommended local artifact.
+            // A published release is signed with the CI keystore when it is
+            // available, so its signature stays the same across versions.
+            signingConfig = if (System.getenv("ANDROID_KEYSTORE_PATH") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

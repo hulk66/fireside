@@ -1,0 +1,106 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# Needed by the release job to create a GitHub Release.
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run the unit tests
+        run: ./gradlew testDebugUnitTest
+
+  release:
+    name: Release APK
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The tag is the single source of truth for both numbers. versionCode has
+      # to increase monotonically or Android refuses the upgrade, and
+      # major*10000 + minor*100 + patch guarantees that as long as the tag does.
+      - name: Derive the version from the tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          core="${version%%-*}"
+          IFS=. read -r major minor patch <<< "$core"
+          {
+            echo "name=$version"
+            echo "code=$(( major * 10000 + minor * 100 + patch ))"
+            if [[ "$version" == *-* ]]; then
+              echo "prerelease=true"
+            else
+              echo "prerelease=false"
+            fi
+          } >> "$GITHUB_OUTPUT"
+
+      # The keystore lives in a repository secret, never in the tree: on a public
+      # repo a committed signing key would let anyone publish an APK that Android
+      # accepts as an upgrade over ours.
+      - name: Decode the signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [[ -z "$KEYSTORE_B64" ]]; then
+            echo "::error::ANDROID_KEYSTORE_B64 is not set. Add the repository secrets (see README)."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/fireside-release.jks"
+
+      - name: Assemble the signed release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/fireside-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -PversionName="${{ steps.version.outputs.name }}" \
+            -PversionCode="${{ steps.version.outputs.code }}"
+
+      # Catches the failure that would otherwise only show up on a Fire TV as
+      # INSTALL_FAILED_UPDATE_INCOMPATIBLE: a release built with the wrong key.
+      - name: Verify the APK signature
+        run: |
+          apksigner verify --print-certs \
+            app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk fireside.apk
+          args=(--title "Fireside ${{ steps.version.outputs.name }}" --generate-notes)
+          if [[ "${{ steps.version.outputs.prerelease }}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" fireside.apk "${args[@]}"
