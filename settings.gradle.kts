@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "immich-firetv-slideshow"
+rootProject.name = "fireside"
 include(":app")

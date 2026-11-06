@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "org.himstedt.immichslideshow"
+    namespace = "org.himstedt.fireside"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.himstedt.immichslideshow"
+        applicationId = "org.himstedt.fireside"
         minSdk = 23
         targetSdk = 35
         versionCode = 1
