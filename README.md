@@ -8,6 +8,28 @@ Built with Kotlin, Jetpack Compose for TV and a hand-written `DrawScope`
 renderer, so every theme is a pure function of time — the same code paints the
 full-screen show and the animated thumbnails in the theme picker.
 
+---
+
+## Video
+
+A 45-second walkthrough on a Fire TV emulator: the connect screen, the album
+browser, the live theme picker, and a few of the shows.
+
+https://github.com/user-attachments/assets/030654da-0c03-4921-a0f6-3157aa0d44f9
+
+If the player does not load: [GIF preview](docs/fireside.gif) ·
+[download the clip](docs/fireside.mp4) (1280×720, 5.3 MB).
+
+<!--
+The clip is a GitHub user-attachments upload, not a repo path, because a repo path
+cannot play: GitHub strips <video> unless src is a user-attachments URL, and
+raw.githubusercontent.com serves mp4 as application/octet-stream with nosniff, so
+the browser refuses it. docs/fireside.mp4 stays in the tree as the download and
+as the source for that upload.
+-->
+
+---
+
 ## How this was built
 
 Fireside was written entirely by **DeepSeek 4.1 Flash**, running locally on two
@@ -41,26 +63,6 @@ demo library — so nothing here needs a server to reproduce.
 | **Scrapbook** — polaroids settle onto a paper desk | **Vintage Prints** — one print on a pile of others, under glass |
 | ![Origami](docs/screenshots/09-origami.jpg) | ![Photo Grid](docs/screenshots/10-photo-grid.jpg) |
 | **Origami** — a wall of photos turning over like sheets of paper | **Photo Grid** — a justified mosaic of the whole album |
-
----
-
-## Video
-
-A 45-second walkthrough on a Fire TV emulator: the connect screen, the album
-browser, the live theme picker, and a few of the shows.
-
-https://github.com/user-attachments/assets/030654da-0c03-4921-a0f6-3157aa0d44f9
-
-If the player does not load: [GIF preview](docs/fireside.gif) ·
-[download the clip](docs/fireside.mp4) (1280×720, 5.3 MB).
-
-<!--
-The clip is a GitHub user-attachments upload, not a repo path, because a repo path
-cannot play: GitHub strips <video> unless src is a user-attachments URL, and
-raw.githubusercontent.com serves mp4 as application/octet-stream with nosniff, so
-the browser refuses it. docs/fireside.mp4 stays in the tree as the download and
-as the source for that upload.
--->
 
 ---
 
