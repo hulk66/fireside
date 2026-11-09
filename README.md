@@ -53,6 +53,19 @@ browser, the live theme picker, and a few of the shows.
 
 The full clip is [docs/fireside.mp4](docs/fireside.mp4) (1280×720, 5.3 MB).
 
+<!--
+The clip can also play inline, but only as an uploaded asset - a repo path cannot
+be used: GitHub strips <video> unless src is a user-attachments URL, and
+raw.githubusercontent.com serves mp4 as application/octet-stream with nosniff, so
+the browser refuses to play it.
+
+To enable it: open this file on github.com, click the pencil, drag
+docs/fireside.mp4 into the text box, and GitHub uploads it and inserts a
+user-attachments URL. Paste that URL below and uncomment the line.
+
+<video src="https://github.com/user-attachments/assets/PASTE-UUID-HERE" width="100%" controls></video>
+-->
+
 ---
 
 ## Features
