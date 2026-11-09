@@ -33,9 +33,13 @@ as the source for that upload.
 ## How this was built
 
 Fireside was written entirely by **DeepSeek 4.1 Flash**, running locally on two
-NVIDIA DGX Spark machines. The setup follows Jayleaton's
-[deepseek-v41-tensorfold-spark](https://github.com/jayleaton/deepseek-v41-tensorfold-spark)
-recipe, and the work was driven through the [PI coding harness](https://pi.dev).
+NVIDIA DGX Spark machines, and the work was driven through the
+[PI coding harness](https://pi.dev).
+
+The local setup was assembled from two published recipes:
+
+- Jayleaton's [deepseek-v41-tensorfold-spark](https://github.com/jayleaton/deepseek-v41-tensorfold-spark)
+- Mia's [DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks](https://github.com/MiaAI-Lab/DeepSeek-v4.1-Flash-1017-2x-DGX-Sparks)
 
 The slideshow was never the point. This was a test of what a local model can do
 on a genuinely non-trivial development task: a real Android app with a
