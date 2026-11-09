@@ -51,17 +51,15 @@ browser, the live theme picker, and a few of the shows.
 
 https://github.com/user-attachments/assets/030654da-0c03-4921-a0f6-3157aa0d44f9
 
+If the player does not load: [GIF preview](docs/fireside.gif) ·
+[download the clip](docs/fireside.mp4) (1280×720, 5.3 MB).
+
 <!--
-The clip can also play inline, but only as an uploaded asset - a repo path cannot
-be used: GitHub strips <video> unless src is a user-attachments URL, and
+The clip is a GitHub user-attachments upload, not a repo path, because a repo path
+cannot play: GitHub strips <video> unless src is a user-attachments URL, and
 raw.githubusercontent.com serves mp4 as application/octet-stream with nosniff, so
-the browser refuses to play it.
-
-To enable it: open this file on github.com, click the pencil, drag
-docs/fireside.mp4 into the text box, and GitHub uploads it and inserts a
-user-attachments URL. Paste that URL below and uncomment the line.
-
-<video src="https://github.com/user-attachments/assets/PASTE-UUID-HERE" width="100%" controls></video>
+the browser refuses it. docs/fireside.mp4 stays in the tree as the download and
+as the source for that upload.
 -->
 
 ---
