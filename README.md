@@ -44,6 +44,17 @@ demo library — so nothing here needs a server to reproduce.
 
 ---
 
+## Video
+
+A 45-second walkthrough on a Fire TV emulator: the connect screen, the album
+browser, the live theme picker, and a few of the shows.
+
+![Fireside walkthrough](docs/fireside.gif)
+
+The full clip is [docs/fireside.mp4](docs/fireside.mp4) (1280×720, 5.3 MB).
+
+---
+
 ## Features
 
 - **Album browser** — covers, photo counts and dates straight from Immich.
