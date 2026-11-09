@@ -49,9 +49,7 @@ demo library — so nothing here needs a server to reproduce.
 A 45-second walkthrough on a Fire TV emulator: the connect screen, the album
 browser, the live theme picker, and a few of the shows.
 
-![Fireside walkthrough](docs/fireside.gif)
-
-The full clip is [docs/fireside.mp4](docs/fireside.mp4) (1280×720, 5.3 MB).
+https://github.com/user-attachments/assets/030654da-0c03-4921-a0f6-3157aa0d44f9
 
 <!--
 The clip can also play inline, but only as an uploaded asset - a repo path cannot
