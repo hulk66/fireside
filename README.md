@@ -503,3 +503,16 @@ clipped there — the grids need top padding to give the ring somewhere to grow.
 arithmetic, wraparound), the deterministic RNG, easing curves, motion viewports
 and effect metadata — 47 assertions that pin down the playback contract the
 renderer relies on.
+
+## Licence
+
+The source code is MIT licensed — see [LICENSE](LICENSE).
+
+That grant covers the code, not the media. The walkthrough video and GIF in
+`docs/` show the author's own photographs, which stay © Tobias Himstedt, all
+rights reserved; they are excluded from the MIT grant so that nobody inherits the
+right to republish them. See [docs/README.md](docs/README.md) for the details,
+and for how to regenerate your own captures from the built-in demo library.
+
+Dependencies keep their own licences (AndroidX, Compose, Coil, Retrofit, OkHttp
+and kotlinx are Apache-2.0; JUnit is EPL-1.0 and test-only).
